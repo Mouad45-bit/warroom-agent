@@ -1,4 +1,7 @@
-package com.warroom.agent.kernel;
+package com.warroom.agent.kernel.supervisor;
+
+import com.warroom.agent.kernel.model.ComponentHealth;
+import com.warroom.agent.kernel.config.AgentConfig;
 
 import java.util.ArrayList;
 import java.util.Collections;

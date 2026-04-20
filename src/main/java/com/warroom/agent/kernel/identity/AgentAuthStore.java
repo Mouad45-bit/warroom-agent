@@ -1,6 +1,7 @@
-package com.warroom.agent.kernel;
+package com.warroom.agent.kernel.identity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warroom.agent.kernel.model.AgentIdentity;
 
 import java.io.IOException;
 import java.nio.file.Files;

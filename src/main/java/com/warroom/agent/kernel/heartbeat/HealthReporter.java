@@ -1,4 +1,9 @@
-package com.warroom.agent.kernel;
+package com.warroom.agent.kernel.heartbeat;
+
+import com.warroom.agent.kernel.model.AgentHealthSnapshot;
+import com.warroom.agent.kernel.model.ComponentHealth;
+import com.warroom.agent.kernel.identity.AgentStateStore;
+import com.warroom.agent.kernel.supervisor.AgentSupervisor;
 
 import java.net.InetAddress;
 import java.time.Instant;

@@ -1,6 +1,15 @@
 package com.warroom.agent.kernel;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warroom.agent.kernel.bootstrap.AgentBootstrap;
+import com.warroom.agent.kernel.config.AgentConfigManager;
+import com.warroom.agent.kernel.enrollment.AgentEnrollmentClient;
+import com.warroom.agent.kernel.heartbeat.HealthReporter;
+import com.warroom.agent.kernel.heartbeat.HeartbeatService;
+import com.warroom.agent.kernel.identity.AgentAuthStore;
+import com.warroom.agent.kernel.identity.AgentStateStore;
+import com.warroom.agent.kernel.supervisor.AgentSupervisor;
+import com.warroom.agent.kernel.supervisor.CollectorRegistry;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

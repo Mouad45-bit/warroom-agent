@@ -1,4 +1,4 @@
-package com.warroom.agent.kernel;
+package com.warroom.agent.kernel.config;
 
 import java.util.ArrayList;
 import java.util.List;

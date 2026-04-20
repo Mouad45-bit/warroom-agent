@@ -1,4 +1,12 @@
-package com.warroom.agent.kernel;
+package com.warroom.agent.kernel.heartbeat;
+
+import com.warroom.agent.kernel.model.AgentHealthSnapshot;
+import com.warroom.agent.kernel.model.AgentIdentity;
+import com.warroom.agent.kernel.config.AgentConfig;
+import com.warroom.agent.kernel.config.AgentConfigManager;
+import com.warroom.agent.kernel.enrollment.AgentEnrollmentClient;
+import com.warroom.agent.kernel.identity.AgentAuthStore;
+import com.warroom.agent.kernel.identity.AgentStateStore;
 
 import java.time.Instant;
 import java.util.Optional;

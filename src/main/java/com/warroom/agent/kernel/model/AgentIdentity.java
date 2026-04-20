@@ -1,4 +1,4 @@
-package com.warroom.agent.kernel;
+package com.warroom.agent.kernel.model;
 
 import java.time.Instant;
 
