@@ -28,7 +28,7 @@ public class AgentController {
 
     @GetMapping("/{agentId}/config")
     public ResponseEntity<AgentConfigDto> getConfig(
-            @PathVariable String agentId,
+            @PathVariable("agentId") String agentId,
             @RequestHeader("Authorization") String authHeader) {
 
         if (!agentService.isAuthorized(agentId, authHeader)) {
@@ -42,7 +42,7 @@ public class AgentController {
     //
     @PostMapping("/{agentId}/heartbeat")
     public ResponseEntity<Void> receiveHeartbeat(
-            @PathVariable String agentId,
+            @PathVariable("agentId") String agentId,
             @RequestHeader("Authorization") String authHeader,
             @RequestBody AgentHealthSnapshotDto snapshot) {
 
