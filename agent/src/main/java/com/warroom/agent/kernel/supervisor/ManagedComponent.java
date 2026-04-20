@@ -6,10 +6,6 @@ import com.warroom.agent.kernel.config.AgentConfig;
 /**
  * Interface commune pour tout composant géré par le supervisor.
  *
- * Plus tard :
- * - LogCollector
- * - SyscallCollector
- * - CommandCollector
  *
  * Tous implémenteront cette interface.
  */
