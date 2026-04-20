@@ -7,6 +7,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class ServerApplication {
     public static void main(String[] args) {
         SpringApplication.run(ServerApplication.class, args);
-        System.out.println("[Serveur] WarRoom SOC Backend démarré sur le port 8080 !");
+        System.out.println("[Server] WarRoom SOC Backend started on port 8080 !");
     }
 }
