@@ -74,7 +74,7 @@ public class AgentAuthStore {
             // Si le fichier existe mais qu'il est illisible (ex: problème de droits d'accès sous Linux,
             // ou fichier corrompu), on transforme l'erreur technique (IOException)
             // en une erreur logique (IllegalStateException) qui fera crasher l'agent proprement au démarrage.
-            throw new IllegalStateException("Impossible to read local identity : " + identityFile, e);
+            throw new IllegalStateException("[AgentAuthStore] Impossible to read local identity : " + identityFile, e);
         }
     }
 
@@ -107,7 +107,7 @@ public class AgentAuthStore {
             // Si l'écriture échoue (ex: disque plein, ou manque de permission d'écriture),
             // on lève une exception critique. L'agent ne peut pas fonctionner de manière
             // fiable s'il est amnésique à chaque redémarrage.
-            throw new IllegalStateException("Impossible to write local identity : " + identityFile, e);
+            throw new IllegalStateException("[AgentAuthStore] Impossible to write local identity : " + identityFile, e);
         }
     }
 }

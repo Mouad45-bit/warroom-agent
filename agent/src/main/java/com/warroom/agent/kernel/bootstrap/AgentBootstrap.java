@@ -219,7 +219,7 @@ public class AgentBootstrap {
         } catch (Exception e) {
             // Transforme l'erreur (ex: serveur injoignable) en IllegalStateException.
             // Cette exception sera interceptée par le RetryExecutor qui déclenchera une nouvelle tentative.
-            throw new IllegalStateException("Enrollment failed : " + e.getMessage(), e);
+            throw new IllegalStateException("[AgentBootstrap] Enrollment failed : " + e.getMessage(), e);
         }
     }
 
