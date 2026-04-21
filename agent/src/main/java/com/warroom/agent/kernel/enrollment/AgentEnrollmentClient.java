@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.warroom.agent.kernel.model.AgentHealthSnapshot;
 import com.warroom.agent.kernel.model.AgentIdentity;
 import com.warroom.agent.kernel.config.AgentConfig;
+import com.warroom.agent.transmission.model.EnvelopedEvent;
 
 import java.io.IOException;
 import java.net.URI;
@@ -11,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -119,6 +121,31 @@ public class AgentEnrollmentClient {
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Impossible Heartbeat", e);
+        }
+    }
+
+    /**
+     * Envoie un lot d'événements emballés au serveur.
+     */
+    public void sendEvents(AgentIdentity identity, List<EnvelopedEvent> batch) {
+        try {
+            String body = objectMapper.writeValueAsString(batch);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/agents/" + identity.agentId() + "/events"))
+                    .header("Authorization", "Bearer " + identity.apiKey())
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (!(response.statusCode() >= 200 && response.statusCode() < 300)) {
+                throw new IllegalStateException("Error sending events : " + response.statusCode());
+            }
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Unable to send events", e);
         }
     }
 }
