@@ -1,5 +1,7 @@
 package com.warroom.agent.kernel.config;
 
+import com.warroom.agent.kernel.identity.AgentStateStore;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -7,33 +9,26 @@ import java.util.concurrent.TimeUnit;
 /**
  * Interroge périodiquement le serveur pour recharger la configuration.
  *
- * Ce composant est volontairement simple :
- * - il appelle configManager.refreshConfig() à intervalle fixe ;
- * - il ne sait rien du contenu de la config ;
- * - la détection de changement et la notification sont
- *   gérées par le ConfigManager lui-même.
- *
- * L'intervalle de poll est fixé à 60 secondes.
- * C'est un compromis entre réactivité et charge réseau.
- * Pour un agent SOC, une minute de latence pour appliquer
- * un changement de config est largement acceptable.
+ * Modification :
+ * - reçoit un AgentStateStore pour compter les échecs de refresh
+ *   (configRefreshFailures).
  */
 public class ConfigRefreshScheduler {
 
     private static final int REFRESH_INTERVAL_SECONDS = 60;
 
     private final AgentConfigManager configManager;
+    private final AgentStateStore stateStore;
     private ScheduledExecutorService scheduler;
     private volatile boolean running = false;
 
-    public ConfigRefreshScheduler(AgentConfigManager configManager) {
+    public ConfigRefreshScheduler(AgentConfigManager configManager, AgentStateStore stateStore) {
         this.configManager = configManager;
+        this.stateStore = stateStore;
     }
 
     public synchronized void start() {
-        if (running) {
-            return;
-        }
+        if (running) return;
 
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "agent-config-refresh");
@@ -41,8 +36,6 @@ public class ConfigRefreshScheduler {
             return t;
         });
 
-        // Le premier refresh est décalé d'un cycle complet :
-        // la config vient d'être chargée au boot, inutile de re-poller immédiatement.
         scheduler.scheduleWithFixedDelay(
                 this::refreshSafely,
                 REFRESH_INTERVAL_SECONDS,
@@ -55,24 +48,17 @@ public class ConfigRefreshScheduler {
     }
 
     public synchronized void stop() {
-        if (!running) {
-            return;
-        }
-
+        if (!running) return;
         scheduler.shutdownNow();
         running = false;
         System.out.println("[ConfigRefresh] Scheduler stopped.");
     }
 
-    /**
-     * Wrapper qui absorbe les exceptions.
-     * Un échec de refresh ne doit jamais tuer le scheduler —
-     * on réessaiera au prochain cycle.
-     */
     private void refreshSafely() {
         try {
             configManager.refreshConfig();
         } catch (Exception e) {
+            stateStore.incrementConfigRefreshFailures();
             System.err.println("[ConfigRefresh] Refresh failed : " + e.getMessage());
         }
     }
