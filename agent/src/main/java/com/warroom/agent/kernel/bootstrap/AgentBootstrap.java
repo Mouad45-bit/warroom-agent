@@ -8,6 +8,7 @@ import com.warroom.agent.kernel.identity.AgentAuthStore;
 import com.warroom.agent.kernel.identity.AgentStateStore;
 import com.warroom.agent.kernel.model.AgentIdentity;
 import com.warroom.agent.kernel.supervisor.AgentSupervisor;
+import com.warroom.agent.transmission.EventBatcher;
 
 import java.net.InetAddress;
 import java.time.Instant;
@@ -34,6 +35,7 @@ public class AgentBootstrap {
     private final AgentSupervisor supervisor;
     private final HeartbeatService heartbeatService;
     private final AgentStateStore stateStore;
+    private final EventBatcher batcher;
 
     private volatile boolean started = false;
 
@@ -43,7 +45,8 @@ public class AgentBootstrap {
             AgentConfigManager configManager,
             AgentSupervisor supervisor,
             HeartbeatService heartbeatService,
-            AgentStateStore stateStore
+            AgentStateStore stateStore,
+            EventBatcher batcher
     ) {
         this.authStore = authStore;
         this.enrollmentClient = enrollmentClient;
@@ -51,6 +54,7 @@ public class AgentBootstrap {
         this.supervisor = supervisor;
         this.heartbeatService = heartbeatService;
         this.stateStore = stateStore;
+        this.batcher = batcher;
     }
 
     /**
@@ -95,7 +99,7 @@ public class AgentBootstrap {
             System.out.println("[AgentBootstrap] Active configuration loaded : " + config);
 
             supervisor.startAll(config);
-
+            batcher.start();
             heartbeatService.start();
 
             started = true;
@@ -116,6 +120,12 @@ public class AgentBootstrap {
             heartbeatService.stop();
         } catch (Exception e) {
             System.err.println("[AgentBootstrap] Heartbeat stop error : " + e.getMessage());
+        }
+
+        try {
+            batcher.stop();
+        } catch (Exception e) {
+            System.err.println("[AgentBootstrap] Batcher stop error : " + e.getMessage());
         }
 
         try {
