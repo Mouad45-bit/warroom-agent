@@ -1,9 +1,6 @@
 package com.warroom.server.service;
 
-import com.warroom.server.dto.AgentConfigDto;
-import com.warroom.server.dto.AgentHealthSnapshotDto;
-import com.warroom.server.dto.EnrollmentRequest;
-import com.warroom.server.dto.EnrollmentResponse;
+import com.warroom.server.dto.*;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -54,5 +51,24 @@ public class AgentService {
     public void processHeartbeat(String agentId, AgentHealthSnapshotDto snapshot) {
         agentHealthStates.put(agentId, snapshot);
         System.out.println("[Server] Heartbeat received from : " + agentId + " | Active : " + snapshot.running());
+    }
+
+    public void processEvents(String agentId, List<EnvelopedEventDto> events) {
+        if (events == null || events.isEmpty()) {
+            return;
+        }
+
+        System.out.println("[Server] Received a batch of " + events.size() + " event(s) from the agent : " + agentId);
+
+        // On affiche les 3 premiers événements pour vérifier que tout passe bien
+        int limit = Math.min(events.size(), 3);
+        for (int i = 0; i < limit; i++) {
+            EnvelopedEventDto event = events.get(i);
+            System.out.println("   -> [" + event.sourceType() + "] " + event.payload());
+        }
+
+        if (events.size() > 3) {
+            System.out.println("   -> ... and " + (events.size() - 3) + " others.");
+        }
     }
 }
