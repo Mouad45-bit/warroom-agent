@@ -1,5 +1,7 @@
 package com.warroom.agent.kernel.supervisor;
 
+import com.warroom.agent.transmission.LocalEventQueue;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +19,18 @@ import java.util.List;
  */
 public class CollectorRegistry {
 
+    private final LocalEventQueue eventQueue;
+
+    public CollectorRegistry(LocalEventQueue eventQueue) {
+        this.eventQueue = eventQueue;
+    }
+
     public List<ManagedComponent> registeredComponents() {
-        return new ArrayList<>();
+        List<ManagedComponent> components = new ArrayList<>();
+
+        // Plus tard, ton collaborateur fera :
+        // components.add(new LogCollector(eventQueue));
+
+        return components;
     }
 }
