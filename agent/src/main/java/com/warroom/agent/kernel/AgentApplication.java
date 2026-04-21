@@ -62,7 +62,7 @@ public final class AgentApplication {
                 );
 
         // Création de la file d'attente locale
-        LocalEventQueue eventQueue = new LocalEventQueue();
+        LocalEventQueue eventQueue = new LocalEventQueue(stateStore);
 
         // --- INJECTION DE TEST TEMPORAIRE ---
         // On simule le travail d'un collecteur qui trouverait une alerte
@@ -78,7 +78,7 @@ public final class AgentApplication {
         CollectorRegistry collectorRegistry = new CollectorRegistry(eventQueue);
 
         // Supervisor : démarre/arrête/surveille les composants.
-        AgentSupervisor supervisor = new AgentSupervisor(collectorRegistry.registeredComponents());
+        AgentSupervisor supervisor = new AgentSupervisor(collectorRegistry.registeredComponents(), stateStore);
 
         // Assemble la vue santé de l'agent.
         HealthReporter healthReporter = new HealthReporter(supervisor, stateStore);
