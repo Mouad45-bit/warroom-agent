@@ -4,6 +4,7 @@ import com.warroom.agent.kernel.model.AgentHealthSnapshot;
 import com.warroom.agent.kernel.model.AgentIdentity;
 import com.warroom.agent.kernel.config.AgentConfig;
 import com.warroom.agent.kernel.config.AgentConfigManager;
+import com.warroom.agent.kernel.config.ConfigChangeListener;
 import com.warroom.agent.kernel.enrollment.AgentEnrollmentClient;
 import com.warroom.agent.kernel.identity.AgentAuthStore;
 import com.warroom.agent.kernel.identity.AgentStateStore;
@@ -17,10 +18,12 @@ import java.util.concurrent.TimeUnit;
 /**
  * Envoie périodiquement l'état santé de l'agent au backend.
  *
- * Le heartbeat sert à répondre à la question :
- * "L'agent est-il vivant, configuré et opérationnel ?"
+ * Implémente ConfigChangeListener pour réagir aux changements
+ * d'intervalle de heartbeat poussés par le serveur.
+ * Si heartbeatIntervalSeconds change, le service se redémarre
+ * automatiquement avec le nouvel intervalle.
  */
-public class HeartbeatService {
+public class HeartbeatService implements ConfigChangeListener {
 
     private final AgentAuthStore authStore;
     private final AgentConfigManager configManager;
@@ -30,6 +33,9 @@ public class HeartbeatService {
 
     private ScheduledExecutorService scheduler;
     private volatile boolean started = false;
+
+    /** Intervalle courant pour détecter les vrais changements. */
+    private volatile int currentIntervalSeconds;
 
     public HeartbeatService(
             AgentAuthStore authStore,
@@ -51,7 +57,7 @@ public class HeartbeatService {
         }
 
         AgentConfig config = configManager.getActiveConfig();
-        int interval = Math.max(5, config.getHeartbeatIntervalSeconds());
+        currentIntervalSeconds = Math.max(5, config.getHeartbeatIntervalSeconds());
 
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "agent-heartbeat-thread");
@@ -59,10 +65,15 @@ public class HeartbeatService {
             return t;
         });
 
-        scheduler.scheduleAtFixedRate(this::sendHeartbeatSafely, interval, interval, TimeUnit.SECONDS);
-        started = true;
+        scheduler.scheduleAtFixedRate(
+                this::sendHeartbeatSafely,
+                currentIntervalSeconds,
+                currentIntervalSeconds,
+                TimeUnit.SECONDS
+        );
 
-        System.out.println("[Heartbeat] Service started. interval=" + interval + "s");
+        started = true;
+        System.out.println("[Heartbeat] Service started. interval=" + currentIntervalSeconds + "s");
     }
 
     public synchronized void stop() {
@@ -74,6 +85,29 @@ public class HeartbeatService {
         started = false;
         System.out.println("[Heartbeat] Service stopped.");
     }
+
+    // ── ConfigChangeListener ─────────────────────────────────────────
+
+    /**
+     * Réagit à un changement de configuration.
+     *
+     * On ne redémarre le scheduler que si heartbeatIntervalSeconds
+     * a réellement changé. Si seul le batchSize a bougé par exemple,
+     * le heartbeat n'a rien à faire.
+     */
+    @Override
+    public void onConfigChanged(AgentConfig oldConfig, AgentConfig newConfig) {
+        int newInterval = Math.max(5, newConfig.getHeartbeatIntervalSeconds());
+
+        if (newInterval != currentIntervalSeconds) {
+            System.out.println("[Heartbeat] Interval changed : "
+                    + currentIntervalSeconds + "s -> " + newInterval + "s. Restarting...");
+            stop();
+            start();
+        }
+    }
+
+    // ── Envoi du heartbeat ───────────────────────────────────────────
 
     private void sendHeartbeatSafely() {
         try {
