@@ -13,7 +13,8 @@ import java.util.List;
  * Assemble une vue technique cohérente de l'état de l'agent.
  *
  * Ce composant ne parle pas au réseau.
- * Il construit uniquement un objet "AgentHealthSnapshot".
+ * Il lit le stateStore et le supervisor, et construit un AgentHealthSnapshot
+ * qui sera sérialisé en JSON et envoyé au serveur via heartbeat.
  */
 public class HealthReporter {
 
@@ -34,10 +35,24 @@ public class HealthReporter {
                     InetAddress.getLocalHost().getHostName(),
                     Instant.now(),
                     true,
+
+                    // Transmission
                     stateStore.getQueuedEvents(),
                     stateStore.getDeliveredEvents(),
                     stateStore.getLastSuccessfulDeliveryAt(),
+                    stateStore.getFailedBatches(),
+                    stateStore.getDroppedEvents(),
+
+                    // Cycle de vie
                     stateStore.getStartedAt(),
+                    stateStore.getEnrollmentRetries(),
+
+                    // Configuration
+                    stateStore.getConfigRefreshFailures(),
+
+                    // Composants
+                    stateStore.getComponentRestarts(),
+                    stateStore.getQuarantinedComponents(),
                     componentHealth
             );
         } catch (Exception e) {
