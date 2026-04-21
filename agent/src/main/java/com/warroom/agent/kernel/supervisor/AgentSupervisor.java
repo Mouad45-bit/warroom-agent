@@ -2,6 +2,7 @@ package com.warroom.agent.kernel.supervisor;
 
 import com.warroom.agent.kernel.config.AgentConfig;
 import com.warroom.agent.kernel.config.ConfigChangeListener;
+import com.warroom.agent.kernel.identity.AgentStateStore;
 import com.warroom.agent.kernel.model.ComponentHealth;
 
 import java.util.ArrayList;
@@ -42,14 +43,17 @@ public class AgentSupervisor implements ConfigChangeListener {
     /** Dernière config vue (pour savoir quels composants doivent tourner). */
     private volatile AgentConfig currentConfig;
 
+    private final AgentStateStore stateStore;
+
     /** Thread daemon du watchdog. */
     private ScheduledExecutorService watchdog;
     private volatile boolean started = false;
 
-    public AgentSupervisor(List<ManagedComponent> components) {
+    public AgentSupervisor(List<ManagedComponent> components, AgentStateStore stateStore) {
         for (ManagedComponent component : components) {
             this.components.put(component.name(), component);
         }
+        this.stateStore = stateStore;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -184,15 +188,22 @@ public class AgentSupervisor implements ConfigChangeListener {
             ManagedComponent component = components.get(name);
             ComponentState state = states.get(name);
 
-            if (component == null || state == null) {
-                continue;
-            }
+            if (component == null || state == null) continue;
+
+            // Lire le statut avant de le modifier.
+            boolean wasQuarantined = state.status() == ComponentStatus.QUARANTINED;
 
             if (state.status() == ComponentStatus.RUNNING) {
                 System.out.println("[Supervisor] Hot-reload : stopping " + name);
                 tryStop(component);
             }
+
             state.setStatus(ComponentStatus.DISABLED);
+
+            // Nettoyer la quarantaine uniquement si le composant y était.
+            if (wasQuarantined) {
+                stateStore.markComponentUnquarantined(name);
+            }
         }
     }
 
@@ -269,18 +280,19 @@ public class AgentSupervisor implements ConfigChangeListener {
      */
     private void tryStart(ManagedComponent component) {
         ComponentState state = states.get(component.name());
-        if (state == null) {
-            return;
-        }
-
+        if (state == null) return;
         try {
             component.start(currentConfig);
             state.recordRestartSuccess();
+            stateStore.incrementComponentRestarts();
             System.out.println("[Supervisor] Component started : " + component.name());
         } catch (Exception e) {
-            System.err.println("[Supervisor] Failed to start " + component.name()
-                    + " : " + e.getMessage());
+            System.err.println("[Supervisor] Failed to start " + component.name() + " : " + e.getMessage());
             state.recordCrash(e.getMessage());
+            // Si recordCrash() vient de passer le composant en QUARANTINED, on le signale.
+            if (state.status() == ComponentStatus.QUARANTINED) {
+                stateStore.markComponentQuarantined(component.name());
+            }
         }
     }
 
