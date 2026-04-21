@@ -1,13 +1,12 @@
 package com.warroom.server.controller;
 
-import com.warroom.server.dto.AgentConfigDto;
-import com.warroom.server.dto.AgentHealthSnapshotDto;
-import com.warroom.server.dto.EnrollmentRequest;
-import com.warroom.server.dto.EnrollmentResponse;
+import com.warroom.server.dto.*;
 import com.warroom.server.service.AgentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/agents")
@@ -51,6 +50,22 @@ public class AgentController {
         }
 
         agentService.processHeartbeat(agentId, snapshot);
+        return ResponseEntity.status(HttpStatus.OK).build();
+    }
+
+    //
+    @PostMapping("/{agentId}/events")
+    public ResponseEntity<Void> receiveEvents(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody List<EnvelopedEventDto> events) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        agentService.processEvents(agentId, events);
+
         return ResponseEntity.status(HttpStatus.OK).build();
     }
 }
