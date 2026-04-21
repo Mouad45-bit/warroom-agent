@@ -64,6 +64,14 @@ public final class AgentApplication {
         // Création de la file d'attente locale
         LocalEventQueue eventQueue = new LocalEventQueue();
 
+        // --- INJECTION DE TEST TEMPORAIRE ---
+        // On simule le travail d'un collecteur qui trouverait une alerte
+        eventQueue.offer(new com.warroom.agent.transmission.model.RawEvent(
+                "test.system",
+                "Alert manually generated to test end-to-end transmission !"
+        ));
+        // ------------------------------------
+
         // Registre des composants supervisés.
         // Pour l'instant il n'y a pas encore de collecteurs réels,
         // mais on garde déjà le point d'extension prêt.
