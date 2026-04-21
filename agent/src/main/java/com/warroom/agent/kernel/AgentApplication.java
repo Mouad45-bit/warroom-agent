@@ -10,6 +10,8 @@ import com.warroom.agent.kernel.identity.AgentAuthStore;
 import com.warroom.agent.kernel.identity.AgentStateStore;
 import com.warroom.agent.kernel.supervisor.AgentSupervisor;
 import com.warroom.agent.kernel.supervisor.CollectorRegistry;
+import com.warroom.agent.transmission.LocalEventQueue;
+import com.warroom.agent.transmission.EventBatcher;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,10 +61,13 @@ public final class AgentApplication {
                         authStore
                 );
 
+        // Création de la file d'attente locale
+        LocalEventQueue eventQueue = new LocalEventQueue();
+
         // Registre des composants supervisés.
         // Pour l'instant il n'y a pas encore de collecteurs réels,
         // mais on garde déjà le point d'extension prêt.
-        CollectorRegistry collectorRegistry = new CollectorRegistry();
+        CollectorRegistry collectorRegistry = new CollectorRegistry(eventQueue);
 
         // Supervisor : démarre/arrête/surveille les composants.
         AgentSupervisor supervisor = new AgentSupervisor(collectorRegistry.registeredComponents());
@@ -74,6 +79,9 @@ public final class AgentApplication {
         HeartbeatService heartbeatService =
                 new HeartbeatService(authStore, configManager, healthReporter, enrollmentClient, stateStore);
 
+        // Création du Batcher (regroupeur/expéditeur)
+        EventBatcher batcher = new EventBatcher(eventQueue, enrollmentClient, authStore, configManager, stateStore);
+
         // Bootstrap principal.
         AgentBootstrap bootstrap =
                 new AgentBootstrap(
@@ -82,7 +90,8 @@ public final class AgentApplication {
                         configManager,
                         supervisor,
                         heartbeatService,
-                        stateStore
+                        stateStore,
+                        batcher
                 );
 
         // Hook d'arrêt propre.
