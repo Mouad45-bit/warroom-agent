@@ -66,10 +66,10 @@ public final class AgentApplication {
 
         // --- INJECTION DE TEST TEMPORAIRE ---
         // On simule le travail d'un collecteur qui trouverait une alerte
-        eventQueue.offer(new com.warroom.agent.transmission.model.RawEvent(
+        /*eventQueue.offer(new com.warroom.agent.transmission.model.RawEvent(
                 "test.system",
                 "Alert manually generated to test end-to-end transmission !"
-        ));
+        ));*/
         // ------------------------------------
 
         // Registre des composants supervisés.

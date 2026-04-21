@@ -1,5 +1,7 @@
 package com.warroom.agent.kernel.supervisor;
 
+import com.warroom.agent.collectors.CommandCollector;
+import com.warroom.agent.collectors.LogCollector;
 import com.warroom.agent.transmission.LocalEventQueue;
 
 import java.util.ArrayList;
@@ -29,7 +31,8 @@ public class CollectorRegistry {
         List<ManagedComponent> components = new ArrayList<>();
 
         // Plus tard, ton collaborateur fera :
-        // components.add(new LogCollector(eventQueue));
+        components.add(new CommandCollector(eventQueue));
+        components.add(new LogCollector(eventQueue));
 
         return components;
     }
