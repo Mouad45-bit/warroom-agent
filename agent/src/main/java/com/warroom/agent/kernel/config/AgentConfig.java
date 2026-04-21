@@ -2,6 +2,7 @@ package com.warroom.agent.kernel.config;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Configuration active de l'agent.
@@ -14,6 +15,9 @@ import java.util.List;
  *
  * Plus tard, cette classe pourra contenir
  * des sections dédiées par collecteur.
+ *
+ * equals() et hashCode() permettent au ConfigManager
+ * de détecter les changements de configuration.
  */
 public class AgentConfig {
 
@@ -65,5 +69,28 @@ public class AgentConfig {
                 ", retryIntervalSeconds=" + retryIntervalSeconds +
                 ", enabledCollectors=" + enabledCollectors +
                 '}';
+    }
+
+    // ── Détection de changements ──────────────────
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AgentConfig that = (AgentConfig) o;
+        return heartbeatIntervalSeconds == that.heartbeatIntervalSeconds
+                && batchSize == that.batchSize
+                && retryIntervalSeconds == that.retryIntervalSeconds
+                && Objects.equals(enabledCollectors, that.enabledCollectors);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                heartbeatIntervalSeconds,
+                batchSize,
+                retryIntervalSeconds,
+                enabledCollectors
+        );
     }
 }
