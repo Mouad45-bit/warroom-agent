@@ -235,74 +235,203 @@ FICHIER : src\main\java\com\warroom\server\service\AgentService.java
 package com.warroom.server.service;
 
 import com.warroom.server.dto.*;
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.AgentHealthRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.repository.AgentHealthRecordRepository;
+import com.warroom.server.repository.AgentRepository;
+import com.warroom.server.repository.SecurityEventRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AgentService {
 
-    // Stockage en mémoire pour le MVP (à remplacer par une base de données plus tard)
-    // Clé : agentId, Valeur : apiKey
-    private final Map<String, String> registeredAgents = new ConcurrentHashMap<>();
+    private final AgentRepository agentRepository;
+    private final SecurityEventRepository eventRepository;
+    private final AgentHealthRecordRepository healthRepository;
+    private final EventAnalysisService eventAnalysisService;
 
-    // Clé : agentId, Valeur : dernier état de santé connu
-    private final Map<String, AgentHealthSnapshotDto> agentHealthStates = new ConcurrentHashMap<>();
+    public AgentService(AgentRepository agentRepository,
+                        SecurityEventRepository eventRepository,
+                        AgentHealthRecordRepository healthRepository,
+                        EventAnalysisService eventAnalysisService) {
+        this.agentRepository = agentRepository;
+        this.eventRepository = eventRepository;
+        this.healthRepository = healthRepository;
+        this.eventAnalysisService = eventAnalysisService;
+    }
+
+    // -------------------------------------------------------------------------
+    // ENROLLMENT
+    // -------------------------------------------------------------------------
 
     public EnrollmentResponse enrollAgent(EnrollmentRequest request) {
         String agentId = "agt-" + UUID.randomUUID().toString().substring(0, 8);
-        String apiKey = UUID.randomUUID().toString();
+        String apiKey  = UUID.randomUUID().toString();
 
-        registeredAgents.put(agentId, apiKey);
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setApiKey(apiKey);
+        agent.setHostname(request.hostname());
+        agent.setOsName(request.osName());
+        agent.setOsVersion(request.osVersion());
+        agent.setAgentVersion(request.agentVersion());
+        agent.setEnrolledAt(Instant.now());
+        agent.setLastSeenAt(Instant.now());
 
-        System.out.println("[Server] New agent enlisted : " + agentId + " (" + request.hostname() + ")");
+        agentRepository.save(agent);
+
+        System.out.println("[Server] New agent enlisted : " + agentId
+                + " (" + request.hostname() + ")");
 
         return new EnrollmentResponse(agentId, apiKey);
     }
 
-    public boolean isAuthorized(String agentId, String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return false;
-        }
-        String providedToken = authHeader.substring(7);
-        String expectedToken = registeredAgents.get(agentId);
+    // -------------------------------------------------------------------------
+    // AUTH
+    // -------------------------------------------------------------------------
 
-        return expectedToken != null && expectedToken.equals(providedToken);
+    public boolean isAuthorized(String agentId, String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) return false;
+
+        String providedToken = authHeader.substring(7);
+
+        return agentRepository.findById(agentId)
+                .map(a -> a.getApiKey().equals(providedToken))
+                .orElse(false);
     }
 
+    // -------------------------------------------------------------------------
+    // CONFIG
+    // -------------------------------------------------------------------------
+
     public AgentConfigDto getActiveConfig(String agentId) {
+        // Config statique pour l'instant — étape 8 : la rendre dynamique par agent
         return new AgentConfigDto(
-                30, // heartbeat 30s
-                100, // batch 100 événements
-                10, // retry 10s
-                List.of("LogCollector", "CommandCollector") // Collecteurs activés
+                30,
+                100,
+                10,
+                List.of("LogCollector", "CommandCollector")
         );
     }
 
+    // -------------------------------------------------------------------------
+    // HEARTBEAT
+    // -------------------------------------------------------------------------
+
     public void processHeartbeat(String agentId, AgentHealthSnapshotDto snapshot) {
-        agentHealthStates.put(agentId, snapshot);
-        System.out.println("[Server] Heartbeat received from : " + agentId + " | Active : " + snapshot.running());
+        // 1. Mettre à jour lastSeenAt sur l'agent
+        agentRepository.findById(agentId).ifPresent(agent -> {
+            agent.setLastSeenAt(Instant.now());
+            agentRepository.save(agent);
+        });
+
+        // 2. Persister le snapshot en base
+        agentRepository.findById(agentId).ifPresent(agent -> {
+            AgentHealthRecord record = new AgentHealthRecord();
+            record.setAgent(agent);
+            record.setTimestamp(Instant.now());
+            record.setRunning(snapshot.running());
+            // On sérialise les infos utiles dans snapshotData
+            record.setSnapshotData(
+                    "queued=" + snapshot.queuedEvents()
+                            + " delivered=" + snapshot.deliveredEvents()
+            );
+            healthRepository.save(record);
+        });
+
+        System.out.println("[Server] Heartbeat received from : "
+                + agentId + " | Active : " + snapshot.running());
     }
 
+    // -------------------------------------------------------------------------
+    // EVENTS
+    // -------------------------------------------------------------------------
+
     public void processEvents(String agentId, List<EnvelopedEventDto> events) {
-        if (events == null || events.isEmpty()) {
+        if (events == null || events.isEmpty()) return;
+
+        // Récupérer l'Agent une seule fois (nécessaire pour la relation @ManyToOne)
+        Agent agent = agentRepository.findById(agentId).orElse(null);
+        if (agent == null) {
+            System.err.println("[Server] Agent inconnu : " + agentId + " — batch ignoré");
             return;
         }
 
-        System.out.println("[Server] Received a batch of " + events.size() + " event(s) from the agent : " + agentId);
+        for (EnvelopedEventDto dto : events) {
+            // 1. Mapper le DTO → entité
+            SecurityEvent event = new SecurityEvent();
+            event.setAgent(agent);
+            event.setSourceType(dto.sourceType());
+            event.setCollectedAt(dto.collectedAt());
+            event.setReceivedAt(Instant.now());
+            event.setPayload(dto.payload());
 
-        // On affiche les 3 premiers événements pour vérifier que tout passe bien
-        int limit = Math.min(events.size(), 3);
-        for (int i = 0; i < limit; i++) {
-            EnvelopedEventDto event = events.get(i);
-            System.out.println("   -> [" + event.sourceType() + "] " + event.payload());
+            // 2. Persister l'événement brut
+            SecurityEvent saved = eventRepository.save(event);
+
+            // 3. Analyser → génère et persiste les alertes si nécessaire
+            eventAnalysisService.analyze(saved);
         }
 
-        if (events.size() > 3) {
-            System.out.println("   -> ... and " + (events.size() - 3) + " others.");
+        System.out.println("[Server] Persisted " + events.size()
+                + " event(s) from " + agentId);
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\EventAnalysisService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.repository.AlertRecordRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class EventAnalysisService {
+
+    // La clé est le sourceType, la valeur est une LISTE d'analyseurs abonnés à ce type
+    private final Map<String, List<EventAnalyzer>> analyzers;
+    private final AlertRecordRepository alertRepository;
+
+    public EventAnalysisService(List<EventAnalyzer> analyzerList,
+                                AlertRecordRepository alertRepository) {
+
+        // groupingBy regroupe tous les analyseurs qui ont le même sourceType dans une List
+        this.analyzers = analyzerList.stream()
+                .collect(Collectors.groupingBy(EventAnalyzer::supportedSourceType));
+
+        this.alertRepository = alertRepository;
+    }
+
+    @Transactional
+    public void analyze(SecurityEvent event) {
+        // On récupère la liste des analyseurs pour ce type (ou une liste vide si aucun n'existe)
+        List<EventAnalyzer> matchedAnalyzers = analyzers.getOrDefault(event.getSourceType(), Collections.emptyList());
+
+        for (EventAnalyzer analyzer : matchedAnalyzers) {
+            List<AlertRecord> alerts = analyzer.analyze(event);
+            if (!alerts.isEmpty()) {
+                alertRepository.saveAll(alerts);
+
+                // Optionnel : Affichage console pour le debug
+                for (AlertRecord alert : alerts) {
+                    System.err.println(" ALERTE [" + alert.getSeverity() + "] : " + alert.getMessage());
+                }
+            }
         }
     }
 }
@@ -444,16 +573,12 @@ package com.warroom.server.entity;
 
 import com.warroom.server.model.Severity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-
+import lombok.ToString;
 
 import java.time.Instant;
 
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
 @Entity
 @Table(name = "alert_records")
 public class AlertRecord {
@@ -462,19 +587,22 @@ public class AlertRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // 1. LE CHAMP MANQUANT : La traçabilité
+    // Permet de relier cette alerte au log brut exact qui l'a déclenchée
+    private Long eventId;
+
+    // 2. LE BOUCLIER LOMBOK
+    @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_id", nullable = false)
     private Agent agent;
 
-    // L'annotation magique pour sauvegarder le texte ("CRITICAL") et non le chiffre (4)
     @Enumerated(EnumType.STRING)
     private Severity severity;
 
     private String message;
     private Instant createdAt;
     private boolean acknowledged;
-
-
 }
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -607,7 +735,7 @@ public record EnvelopedEventDto(
 ) {}
 
 ########################################################################################################################
-GROUPE : WARROOM/OTHER
+GROUPE : WARROOM/ANALYSIS
 ########################################################################################################################
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -631,6 +759,277 @@ public interface EventAnalyzer {
      */
     List<AlertRecord> analyze(SecurityEvent event);
 }
+
+########################################################################################################################
+GROUPE : WARROOM/ANALYSIS/IMPL
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\AuthLogAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Component
+public class AuthLogAnalyzer implements EventAnalyzer {
+
+    // Mémoire : Associe une IP source à une file d'attente d'horodatages (les échecs)
+    private final Map<String, Deque<Instant>> ipFailureWindow = new ConcurrentHashMap<>();
+
+    // Configuration de la fenêtre de détection
+    private static final int WINDOW_SECONDS = 60;
+    private static final int BRUTE_FORCE_THRESHOLD = 5;
+
+    // Regex pour extraire l'IPv4 du log SSH classique
+    private static final Pattern IP_PATTERN = Pattern.compile("from (\\d+\\.\\d+\\.\\d+\\.\\d+)");
+
+    @Override
+    public String supportedSourceType() {
+        return "linux.auth.log";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) {
+            return alerts;
+        }
+
+        // --- RÈGLE 1 : Connexion ROOT (Tolérance Zéro) ---
+        boolean isRootLogin = payload.contains("Accepted password for root")
+                || payload.contains("session opened for user root")
+                || payload.contains("Mot de passe accepté pour root");
+
+        if (isRootLogin) {
+            alerts.add(buildAlert(event, Severity.CRITICAL, "Alerte Critique : Connexion ROOT détectée avec succès."));
+            return alerts; // On arrête l'analyse pour cette ligne
+        }
+
+        // --- RÈGLE 2 : Échec d'authentification et Force Brute ---
+        boolean isFailure = payload.contains("Failed password")
+                || payload.contains("Mot de passe échoué");
+
+        if (isFailure) {
+            String sourceIp = extractIp(payload);
+
+            // Si on ne trouve pas l'IP, on utilise "unknown" pour quand même compter les échecs globaux
+            String trackingKey = (sourceIp != null) ? sourceIp : "unknown_ip";
+
+            // 1. Récupérer ou créer la file d'attente pour cette IP
+            Deque<Instant> timestamps = ipFailureWindow.computeIfAbsent(trackingKey, k -> new ConcurrentLinkedDeque<>());
+            Instant now = Instant.now();
+
+            // 2. Ajouter l'échec actuel
+            timestamps.addLast(now);
+
+            // 3. Nettoyer la fenêtre glissante (supprimer les échecs plus vieux que 60 secondes)
+            while (!timestamps.isEmpty() && timestamps.peekFirst().isBefore(now.minusSeconds(WINDOW_SECONDS))) {
+                timestamps.pollFirst();
+            }
+
+            int currentFailures = timestamps.size();
+
+            // 4. Échelonnage de la sévérité
+            if (currentFailures >= BRUTE_FORCE_THRESHOLD) {
+                alerts.add(buildAlert(event, Severity.HIGH,
+                        "ATTAQUE FORCE BRUTE : " + currentFailures + " échecs en " + WINDOW_SECONDS + "s depuis l'IP " + trackingKey));
+
+                // Cooldown : On vide la file pour ne pas spammer d'alertes HIGH à chaque nouvelle ligne
+                timestamps.clear();
+
+            } else if (currentFailures >= 3) {
+                alerts.add(buildAlert(event, Severity.MEDIUM,
+                        "Activité Suspecte : " + currentFailures + " échecs d'authentification depuis l'IP " + trackingKey));
+
+            } else {
+                // Pour 1 ou 2 échecs, on génère une alerte INFO (ou on pourrait choisir de ne rien retourner du tout)
+                alerts.add(buildAlert(event, Severity.INFO,
+                        "Échec d'authentification isolé depuis l'IP " + trackingKey));
+            }
+        }
+
+        return alerts;
+    }
+
+    // --- Fonctions Utilitaires ---
+
+    private String extractIp(String payload) {
+        Matcher matcher = IP_PATTERN.matcher(payload);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        // Ligne cruciale ajoutée suite à ton audit (Point 1) :
+        alert.setEventId(event.getId());
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setAcknowledged(false);
+        return alert;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\FileIntegrityAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class FileIntegrityAnalyzer implements EventAnalyzer {
+
+    @Override
+    public String supportedSourceType() {
+        return "file.integrity"; // La clé de routage exacte définie par ton binôme
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) {
+            return alerts;
+        }
+
+        // 1. Parsing du payload (Extraction des paires clé=valeur)
+        Map<String, String> fields = parsePayload(payload);
+
+        String action = fields.get("action");
+        String file = fields.get("file");
+
+        // Si le log est mal formé, on l'ignore
+        if (action == null || file == null) {
+            return alerts;
+        }
+
+        // 2. Évaluation des règles de sécurité
+        Severity detectedSeverity = null;
+        String alertMessage = null;
+
+        // --- RÈGLES CRITIQUES (Fichiers vitaux) ---
+        if (file.equals("/etc/shadow") || file.equals("/etc/sudoers")) {
+            // Correction Point 1 : Filtre explicite sur l'action
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.CRITICAL;
+                alertMessage = "Fichier système vital altéré (" + file + ") - Action : " + action;
+            }
+
+        } else if (file.equals("/etc/passwd")) {
+            // Ajout du DELETED pour passwd également (Correction Point 2)
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.CRITICAL;
+                alertMessage = "Modification ou Suppression de /etc/passwd (Backdoor ou Déni de service)";
+            }
+        }
+
+        // --- RÈGLES HAUTES & MOYENNES (Persistance et Configuration) ---
+        else if (file.equals("/etc/ssh/sshd_config")) {
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.HIGH;
+                alertMessage = "Configuration du serveur SSH modifiée ou supprimée";
+            }
+
+        } else if (file.equals("/etc/crontab") || file.startsWith("/var/spool/cron/crontabs/")) {
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.HIGH;
+                alertMessage = "Tâche planifiée globale altérée (Fichier : " + file + ")";
+            }
+
+        } else if (file.startsWith("/etc/cron.d/") && "CREATED".equals(action)) {
+            detectedSeverity = Severity.HIGH;
+            alertMessage = "Nouvelle tâche planifiée système créée (Tentative de persistance suspectée)";
+
+        } else if (file.endsWith("/authorized_keys") || file.endsWith("/authorized_keys2")) {
+            if ("MODIFIED".equals(action) || "CREATED".equals(action)) {
+                detectedSeverity = Severity.HIGH;
+                alertMessage = "Clé SSH ajoutée ou modifiée (Accès permanent potentiel sur " + file + ")";
+            }
+            // Correction Point 3 : On n'est plus silencieux sur la suppression
+            else if ("DELETED".equals(action)) {
+                detectedSeverity = Severity.MEDIUM;
+                alertMessage = "Clé SSH supprimée (Nettoyage de traces ou Déni de service sur " + file + ")";
+            }
+        }
+
+        // --- RÈGLES MOYENNES ---
+        else if (file.equals("/etc/cron.allow") || file.equals("/etc/cron.deny")) {
+            detectedSeverity = Severity.MEDIUM;
+            alertMessage = "Permissions des tâches planifiées modifiées (" + file + ")";
+        }
+
+        // 3. Création de l'alerte si une règle a matché
+        if (detectedSeverity != null) {
+            AlertRecord alert = new AlertRecord();
+            alert.setAgent(event.getAgent());
+            alert.setEventId(event.getId()); // La traçabilité vers le log brut
+            alert.setSeverity(detectedSeverity);
+            alert.setMessage("INTÉGRITÉ COMPROMISE : " + alertMessage);
+            alert.setCreatedAt(Instant.now());
+            alert.setAcknowledged(false);
+
+            alerts.add(alert);
+        }
+
+        return alerts;
+    }
+
+    /**
+     * Méthode utilitaire pour parser "action=MODIFIED file=/etc/passwd old_hash=..."
+     */
+    private Map<String, String> parsePayload(String payload) {
+        Map<String, String> fields = new HashMap<>();
+        String[] parts = payload.split(" ");
+
+        for (String part : parts) {
+            int eqIndex = part.indexOf('=');
+            // On s'assure qu'il y a un '=' et qu'il n'est pas le premier caractère
+            if (eqIndex > 0) {
+                String key = part.substring(0, eqIndex);
+                String value = part.substring(eqIndex + 1);
+                fields.put(key, value);
+            }
+        }
+        return fields;
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/MODEL
+########################################################################################################################
 
 ------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\model\Severity.java

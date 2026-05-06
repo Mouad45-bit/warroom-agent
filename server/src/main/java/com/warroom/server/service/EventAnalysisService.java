@@ -5,6 +5,7 @@ import com.warroom.server.entity.AlertRecord;
 import com.warroom.server.entity.SecurityEvent;
 import com.warroom.server.repository.AlertRecordRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +29,7 @@ public class EventAnalysisService {
         this.alertRepository = alertRepository;
     }
 
+    @Transactional
     public void analyze(SecurityEvent event) {
         // On récupère la liste des analyseurs pour ce type (ou une liste vide si aucun n'existe)
         List<EventAnalyzer> matchedAnalyzers = analyzers.getOrDefault(event.getSourceType(), Collections.emptyList());

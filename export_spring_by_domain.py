@@ -29,7 +29,10 @@ COMMON_LAYERS = [
     "config",
     "exception",
     "validator",
-    "util"
+    "util",
+    "analysis",          # Nouveau : pour les interfaces d'analyse
+    "analysis/impl",     # Nouveau : pour les implémentations d'analyseurs
+    "model"              # Nouveau : pour les enums et classes modèles
 ]
 
 GLOBAL_ORDER = [
@@ -98,7 +101,9 @@ def find_business_package(parts):
         "com", "org", "net", "io", "app", "example",
         "config", "security", "controller", "service", "repository",
         "entity", "dto", "mapper", "exception", "exceptions",
-        "validator", "validation", "util", "utils"
+        "validator", "validation", "util", "utils",
+        "analysis",          # Pour éviter que "analysis" soit pris comme package métier
+        "model"              # Idem
     }
 
     for part in package_parts:
@@ -115,6 +120,12 @@ def detect_sub_layer(rel_str):
         return "dto/request"
     if "/dto/response/" in rel_str:
         return "dto/response"
+    if "/analysis/impl/" in rel_str:      # Avant analysis simple pour éviter capture partielle
+        return "analysis/impl"
+    if "/analysis/" in rel_str:
+        return "analysis"
+    if "/model/" in rel_str:
+        return "model"
     if "/controller/" in rel_str:
         return "controller"
     if "/service/" in rel_str:
