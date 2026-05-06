@@ -1,0 +1,648 @@
+========================================================================================================================
+EXPORT SPRING BOOT / MAVEN PAR PACKAGE METIER + COUCHE
+PROJET : C:\Users\marwa\warroom-agent\server
+========================================================================================================================
+
+########################################################################################################################
+GROUPE : POM
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : pom.xml
+------------------------------------------------------------------------------------------------------------------------
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.warroom</groupId>
+        <artifactId>warroom-ecosystem</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>warroom-server</artifactId>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>3.2.3</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.2.3</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+########################################################################################################################
+GROUPE : MAIN CLASS
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\ServerApplication.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ServerApplication.class, args);
+        System.out.println("[Server] WarRoom SOC Backend started on port 8080 !");
+    }
+}
+
+########################################################################################################################
+GROUPE : OTHER
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : docker-compose.yml
+------------------------------------------------------------------------------------------------------------------------
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: warroom-postgres
+    environment:
+      POSTGRES_USER: warroom
+      POSTGRES_PASSWORD: warroom
+      POSTGRES_DB: warroom
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
+
+########################################################################################################################
+GROUPE : RESOURCES/CONFIG
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\resources\application.properties
+------------------------------------------------------------------------------------------------------------------------
+# Serveur
+server.port=8080
+
+# PostgreSQL
+spring.datasource.url=jdbc:postgresql://localhost:5432/warroom
+spring.datasource.username=warroom
+spring.datasource.password=warroom
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA / Hibernate
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.format_sql=true
+
+########################################################################################################################
+GROUPE : WARROOM/CONTROLLER
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AgentController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.*;
+import com.warroom.server.service.AgentService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/agents")
+public class AgentController {
+
+    private final AgentService agentService;
+
+    public AgentController(AgentService agentService) {
+        this.agentService = agentService;
+    }
+
+    //
+    @PostMapping("/enroll")
+    public ResponseEntity<EnrollmentResponse> enroll(@RequestBody EnrollmentRequest request) {
+        EnrollmentResponse response = agentService.enrollAgent(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{agentId}/config")
+    public ResponseEntity<AgentConfigDto> getConfig(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        AgentConfigDto config = agentService.getActiveConfig(agentId);
+        return ResponseEntity.status(HttpStatus.OK).body(config);
+    }
+
+    //
+    @PostMapping("/{agentId}/heartbeat")
+    public ResponseEntity<Void> receiveHeartbeat(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody AgentHealthSnapshotDto snapshot) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        agentService.processHeartbeat(agentId, snapshot);
+        return ResponseEntity.status(HttpStatus.OK).build();
+    }
+
+    //
+    @PostMapping("/{agentId}/events")
+    public ResponseEntity<Void> receiveEvents(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody List<EnvelopedEventDto> events) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        agentService.processEvents(agentId, events);
+
+        return ResponseEntity.status(HttpStatus.OK).build();
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/SERVICE
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\AgentService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.dto.*;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class AgentService {
+
+    // Stockage en mémoire pour le MVP (à remplacer par une base de données plus tard)
+    // Clé : agentId, Valeur : apiKey
+    private final Map<String, String> registeredAgents = new ConcurrentHashMap<>();
+
+    // Clé : agentId, Valeur : dernier état de santé connu
+    private final Map<String, AgentHealthSnapshotDto> agentHealthStates = new ConcurrentHashMap<>();
+
+    public EnrollmentResponse enrollAgent(EnrollmentRequest request) {
+        String agentId = "agt-" + UUID.randomUUID().toString().substring(0, 8);
+        String apiKey = UUID.randomUUID().toString();
+
+        registeredAgents.put(agentId, apiKey);
+
+        System.out.println("[Server] New agent enlisted : " + agentId + " (" + request.hostname() + ")");
+
+        return new EnrollmentResponse(agentId, apiKey);
+    }
+
+    public boolean isAuthorized(String agentId, String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return false;
+        }
+        String providedToken = authHeader.substring(7);
+        String expectedToken = registeredAgents.get(agentId);
+
+        return expectedToken != null && expectedToken.equals(providedToken);
+    }
+
+    public AgentConfigDto getActiveConfig(String agentId) {
+        return new AgentConfigDto(
+                30, // heartbeat 30s
+                100, // batch 100 événements
+                10, // retry 10s
+                List.of("LogCollector", "CommandCollector") // Collecteurs activés
+        );
+    }
+
+    public void processHeartbeat(String agentId, AgentHealthSnapshotDto snapshot) {
+        agentHealthStates.put(agentId, snapshot);
+        System.out.println("[Server] Heartbeat received from : " + agentId + " | Active : " + snapshot.running());
+    }
+
+    public void processEvents(String agentId, List<EnvelopedEventDto> events) {
+        if (events == null || events.isEmpty()) {
+            return;
+        }
+
+        System.out.println("[Server] Received a batch of " + events.size() + " event(s) from the agent : " + agentId);
+
+        // On affiche les 3 premiers événements pour vérifier que tout passe bien
+        int limit = Math.min(events.size(), 3);
+        for (int i = 0; i < limit; i++) {
+            EnvelopedEventDto event = events.get(i);
+            System.out.println("   -> [" + event.sourceType() + "] " + event.payload());
+        }
+
+        if (events.size() > 3) {
+            System.out.println("   -> ... and " + (events.size() - 3) + " others.");
+        }
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/REPOSITORY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AgentHealthRecordRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.AgentHealthRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface AgentHealthRecordRepository extends JpaRepository<AgentHealthRecord, Long> {
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AgentRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.Agent;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface AgentRepository extends JpaRepository<Agent, String> {
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AlertRecordRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.AlertRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface AlertRecordRepository extends JpaRepository<AlertRecord, Long> {
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\SecurityEventRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.SecurityEvent;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Long> {
+    // La clé primaire est un Long (id généré automatiquement)
+}
+
+########################################################################################################################
+GROUPE : WARROOM/ENTITY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\Agent.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Entity
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "agents")
+public class Agent {
+
+    @Id // La clé primaire (ex: agt-a1b2c3d4)
+    private String agentId;
+
+    private String apiKey;
+    private String hostname;
+    private String osName;
+    private String osVersion;
+    private String agentVersion;
+
+    private Instant enrolledAt;
+    private Instant lastSeenAt; // Mis à jour à chaque Heartbeat
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\AgentHealthRecord.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "agent_health_records")
+public class AgentHealthRecord {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_id", nullable = false)
+    private Agent agent;
+
+    private Instant timestamp;
+    private boolean isRunning;
+
+    @Column(columnDefinition = "TEXT")
+    private String snapshotData; // On stockera le JSON complet ici pour simplifier
+
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\AlertRecord.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.Severity;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+
+import java.time.Instant;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "alert_records")
+public class AlertRecord {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_id", nullable = false)
+    private Agent agent;
+
+    // L'annotation magique pour sauvegarder le texte ("CRITICAL") et non le chiffre (4)
+    @Enumerated(EnumType.STRING)
+    private Severity severity;
+
+    private String message;
+    private Instant createdAt;
+    private boolean acknowledged;
+
+
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\SecurityEvent.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "security_events")
+public class SecurityEvent {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // Lien avec la table agents (Un agent a plusieurs événements)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_id", nullable = false)
+    private Agent agent;
+
+    private String sourceType; // ex: "linux.auth.log"
+    private Instant collectedAt; // Quand le capteur l'a vu
+    private Instant receivedAt;  // Quand le serveur l'a reçu
+
+    @Column(columnDefinition = "TEXT") // TEXT car un log peut être très long
+    private String payload;
+}
+
+########################################################################################################################
+GROUPE : WARROOM/DTO
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentConfigDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.util.List;
+
+public record AgentConfigDto(
+        int heartbeatIntervalSeconds,
+        int batchSize,
+        int retryIntervalSeconds,
+        List<String> enabledCollectors
+) {}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentHealthSnapshotDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.util.List;
+
+public record AgentHealthSnapshotDto(
+        String agentId,
+        String hostname,
+        String timestamp,
+        boolean running,
+        long queuedEvents,
+        long deliveredEvents,
+        String lastSuccessfulDeliveryAt,
+        String startedAt,
+        List<ComponentHealthDto> componentHealth
+) {}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\ComponentHealthDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record ComponentHealthDto(
+        String componentName,
+        boolean running,
+        String statusMessage
+) {}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EnrollmentRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record EnrollmentRequest(
+        String hostname,
+        String osName,
+        String osVersion,
+        String agentVersion
+) {}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EnrollmentResponse.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record EnrollmentResponse(
+        String agentId,
+        String apiKey
+) {}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EnvelopedEventDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.time.Instant;
+
+/**
+ * Représente un événement de sécurité reçu depuis un agent.
+ */
+public record EnvelopedEventDto(
+        String agentId,
+        String hostname,
+        String sourceType,
+        Instant collectedAt,
+        String payload
+) {}
+
+########################################################################################################################
+GROUPE : WARROOM/OTHER
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\EventAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import java.util.List;
+
+public interface EventAnalyzer {
+
+    /**
+     * Indique le sourceType que ce composant sait traiter (ex: "linux.auth.log")
+     */
+    String supportedSourceType();
+
+    /**
+     * Analyse l'événement brut et retourne une liste d'alertes (vide si tout est normal)
+     */
+    List<AlertRecord> analyze(SecurityEvent event);
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\Severity.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum Severity {
+    INFO,       // Événement normal loggé pour audit
+    LOW,        // Anomalie mineure
+    MEDIUM,     // Comportement suspect
+    HIGH,       // Menace probable (brute-force, connexion root)
+    CRITICAL    // Intrusion confirmée (modification /etc/shadow, reverse shell)
+}
+
+

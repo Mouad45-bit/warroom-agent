@@ -39,7 +39,7 @@ public class EventAnalysisService {
 
                 // Optionnel : Affichage console pour le debug
                 for (AlertRecord alert : alerts) {
-                    System.err.println("🚨 ALERTE [" + alert.getSeverity() + "] : " + alert.getMessage());
+                    System.err.println(" ALERTE [" + alert.getSeverity() + "] : " + alert.getMessage());
                 }
             }
         }
