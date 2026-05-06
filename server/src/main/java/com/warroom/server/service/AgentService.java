@@ -44,7 +44,8 @@ public class AgentService {
                 30, // heartbeat 30s
                 100, // batch 100 événements
                 10, // retry 10s
-                List.of("LogCollector", "CommandCollector") // Collecteurs activés
+                List.of("LogCollector", "NetworkCollector", "ProcessCollector", "FileIntegrityCollector")
+                // Collecteurs activés
         );
     }
 
