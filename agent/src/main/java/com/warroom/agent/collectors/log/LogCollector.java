@@ -5,6 +5,7 @@ import com.warroom.agent.kernel.config.AgentConfig;
 import com.warroom.agent.transmission.LocalEventQueue;
 import com.warroom.agent.transmission.model.RawEvent;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -236,26 +237,24 @@ public class LogCollector extends AbstractCollector {
     private void initializeTailers() {
         tailers.clear();
 
-        // auth.log : contient les événements d'authentification (SSH, sudo, su, login...).
-        // C'est LE fichier le plus important pour un SOC.
-        tailers.add(new LogTailer(
-                Path.of("/var/log/auth.log"),
-                "linux.auth.log"
-        ));
+        // Détection de la famille de l'OS
+        boolean isRedHatFamily = Files.exists(Path.of("/etc/redhat-release")) ||
+                Files.exists(Path.of("/etc/fedora-release"));
 
-        // syslog : le journal système général. Contient les messages
-        // des services, du kernel, et des démons.
-        tailers.add(new LogTailer(
-                Path.of("/var/log/syslog"),
-                "linux.syslog"
-        ));
+        if (isRedHatFamily) {
+            System.out.println("[" + NAME + "] Red Hat/Fedora family detected.");
+            tailers.add(new LogTailer(Path.of("/var/log/secure"), "linux.auth.log"));
+            tailers.add(new LogTailer(Path.of("/var/log/messages"), "linux.syslog"));
+        } else {
+            System.out.println("[" + NAME + "] Debian/Ubuntu family (or fallback) detected.");
+            tailers.add(new LogTailer(Path.of("/var/log/auth.log"), "linux.auth.log"));
+            tailers.add(new LogTailer(Path.of("/var/log/syslog"), "linux.syslog"));
+        }
 
-        // kern.log : les messages du noyau Linux. Utile pour détecter
-        // des anomalies matérielles, des modules chargés, ou des
-        // tentatives d'exploitation kernel.
-        tailers.add(new LogTailer(
-                Path.of("/var/log/kern.log"),
-                "linux.kern.log"
-        ));
+        tailers.add(new LogTailer(Path.of("/var/log/kern.log"), "linux.kern.log"));
+
+        // Note : le LogTailer est déjà conçu pour ignorer silencieusement
+        // les fichiers qui n'existent pas grâce à ta vérification Files.exists(filePath),
+        // ce qui rend cette approche totalement "safe".
     }
 }
