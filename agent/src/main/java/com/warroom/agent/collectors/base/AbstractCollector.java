@@ -21,18 +21,18 @@ import com.warroom.agent.transmission.LocalEventQueue;
  *
  * Sans cette classe, chaque collecteur devrait recopier tout ce code.
  * Avec elle, un collecteur concret n'a qu'à implémenter :
- *   - collectorName()  → son nom unique (ex: "LogCollector")
- *   - collect(config)  → sa boucle de travail (le vrai métier)
+ *   - collectorName() → son nom unique (ex: "LogCollector")
+ *   - collect(config) → sa boucle de travail (le vrai métier)
  *
  * ══════════════════════════════════════════════════════════════
  *  COMMENT LE SUPERVISOR UTILISE CETTE CLASSE
  * ══════════════════════════════════════════════════════════════
  *
  * Le Supervisor (AgentSupervisor) appelle :
- *   1. start(config)  → on crée un Thread qui appelle collect(config)
- *   2. isRunning()    → le watchdog vérifie toutes les 10 secondes
- *   3. stop()         → on met running=false et on interrompt le thread
- *   4. health()       → on construit un snapshot pour le heartbeat
+ *   1. start(config) → on crée un Thread qui appelle collect(config)
+ *   2. isRunning() → le watchdog vérifie toutes les 10 secondes
+ *   3. stop() → on met running=false et on interrompt le thread
+ *   4. health() → on construit un snapshot pour le heartbeat
  *
  * Si collect() lève une exception, le thread meurt, isRunning() retourne
  * false, et le watchdog le détecte → redémarrage automatique avec backoff.
@@ -137,11 +137,6 @@ public abstract class AbstractCollector implements ManagedComponent {
      *   - Elle doit gérer InterruptedException proprement (remettre le
      *     flag d'interruption avec Thread.currentThread().interrupt()).
      *
-     * Exemple typique :
-     *   while (isRunning()) {
-     *       // faire le travail...
-     *       Thread.sleep(1000);
-     *   }
      *
      * @param config la configuration active de l'agent au moment du démarrage.
      */
@@ -269,7 +264,7 @@ public abstract class AbstractCollector implements ManagedComponent {
      * pour vérifier que le collecteur est bien vivant.
      *
      * On vérifie DEUX conditions :
-     *   - running == true  → on n'a pas appelé stop()
+     *   - running == true → on n'a pas appelé stop()
      *   - workerThread.isAlive() → le thread Java tourne encore
      *
      * Pourquoi les deux ? Parce que si collect() lève une exception,
