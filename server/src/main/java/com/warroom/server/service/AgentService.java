@@ -9,12 +9,14 @@ import com.warroom.server.repository.AgentHealthRecordRepository;
 import com.warroom.server.repository.AgentRepository;
 import com.warroom.server.repository.SecurityEventRepository;
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class AgentService {
 
@@ -80,12 +82,17 @@ public class AgentService {
     // -------------------------------------------------------------------------
 
     public AgentConfigDto getActiveConfig(String agentId) {
-        // Config statique pour l'instant — étape 8 : la rendre dynamique par agent
+        // On cherche l'agent dans la base de données
+        Agent agent = agentRepository.findById(agentId).orElseThrow(() ->
+                new IllegalArgumentException("Agent inconnu : " + agentId)
+        );
+
+        // On retourne SA configuration personnelle
         return new AgentConfigDto(
-                30,
-                100,
-                10,
-                List.of("LogCollector", "NetworkCollector", "ProcessCollector", "FileIntegrityCollector")
+                agent.getHeartbeatIntervalSeconds(),
+                agent.getBatchSize(),
+                agent.getRetryIntervalSeconds(),
+                agent.getEnabledCollectors()
         );
     }
 

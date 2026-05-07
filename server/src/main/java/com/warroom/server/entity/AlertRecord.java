@@ -20,6 +20,8 @@ public class AlertRecord {
     // Permet de relier cette alerte au log brut exact qui l'a déclenchée
     private Long eventId;
 
+    private String ruleId;
+
     // 2. LE BOUCLIER LOMBOK
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)

@@ -4,6 +4,7 @@ import com.warroom.server.analysis.EventAnalyzer;
 import com.warroom.server.entity.AlertRecord;
 import com.warroom.server.entity.SecurityEvent;
 import com.warroom.server.model.Severity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -49,7 +50,7 @@ public class AuthLogAnalyzer implements EventAnalyzer {
                 || payload.contains("Mot de passe accepté pour root");
 
         if (isRootLogin) {
-            alerts.add(buildAlert(event, Severity.CRITICAL, "Alerte Critique : Connexion ROOT détectée avec succès."));
+            alerts.add(buildAlert(event,"AUTH-ROOT-01", Severity.CRITICAL, "Alerte Critique : Connexion ROOT détectée avec succès."));
             return alerts; // On arrête l'analyse pour cette ligne
         }
 
@@ -79,25 +80,48 @@ public class AuthLogAnalyzer implements EventAnalyzer {
 
             // 4. Échelonnage de la sévérité
             if (currentFailures >= BRUTE_FORCE_THRESHOLD) {
-                alerts.add(buildAlert(event, Severity.HIGH,
+                alerts.add(buildAlert(event, "AUTH-BRUTE-01",Severity.HIGH,
                         "ATTAQUE FORCE BRUTE : " + currentFailures + " échecs en " + WINDOW_SECONDS + "s depuis l'IP " + trackingKey));
 
                 // Cooldown : On vide la file pour ne pas spammer d'alertes HIGH à chaque nouvelle ligne
-                timestamps.clear();
+                ipFailureWindow.remove(trackingKey);
 
             } else if (currentFailures >= 3) {
-                alerts.add(buildAlert(event, Severity.MEDIUM,
+                alerts.add(buildAlert(event, "AUTH-SUSP-01",Severity.MEDIUM,
                         "Activité Suspecte : " + currentFailures + " échecs d'authentification depuis l'IP " + trackingKey));
 
             } else {
                 // Pour 1 ou 2 échecs, on génère une alerte INFO (ou on pourrait choisir de ne rien retourner du tout)
-                alerts.add(buildAlert(event, Severity.INFO,
+                alerts.add(buildAlert(event,"AUTH-FAIL-01", Severity.INFO,
                         "Échec d'authentification isolé depuis l'IP " + trackingKey));
             }
         }
 
         return alerts;
     }
+
+    /**
+     * S'exécute automatiquement toutes les 5 minutes (300000 ms).
+     * Parcourt la Map et supprime les IPs "fantômes" qui ont arrêté d'attaquer.
+     */
+    @Scheduled(fixedRate = 300000)
+    public void cleanOldEntries() {
+        Instant threshold = Instant.now().minusSeconds(WINDOW_SECONDS);
+
+        // removeIf est "thread-safe" sur une ConcurrentHashMap
+        ipFailureWindow.entrySet().removeIf(entry -> {
+            Deque<Instant> timestamps = entry.getValue();
+
+            // On supprime les vieux timestamps
+            while (!timestamps.isEmpty() && timestamps.peekFirst().isBefore(threshold)) {
+                timestamps.pollFirst();
+            }
+
+            // Si la file devient vide, removeIf renvoie "true" et supprime la clé de la Map
+            return timestamps.isEmpty();
+        });
+    }
+
 
     // --- Fonctions Utilitaires ---
 
@@ -109,11 +133,12 @@ public class AuthLogAnalyzer implements EventAnalyzer {
         return null;
     }
 
-    private AlertRecord buildAlert(SecurityEvent event, Severity severity, String message) {
+    private AlertRecord buildAlert(SecurityEvent event,String ruleId, Severity severity, String message) {
         AlertRecord alert = new AlertRecord();
         alert.setAgent(event.getAgent());
         // Ligne cruciale ajoutée suite à ton audit (Point 1) :
         alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
         alert.setSeverity(severity);
         alert.setMessage(message);
         alert.setCreatedAt(Instant.now());

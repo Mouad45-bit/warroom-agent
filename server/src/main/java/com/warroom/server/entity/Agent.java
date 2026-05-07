@@ -1,13 +1,12 @@
 package com.warroom.server.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.List;
 
 @Entity
 @Data
@@ -27,4 +26,19 @@ public class Agent {
 
     private Instant enrolledAt;
     private Instant lastSeenAt; // Mis à jour à chaque Heartbeat
+
+    private int heartbeatIntervalSeconds = 30; // Valeur par défaut
+    private int batchSize = 100;               // Valeur par défaut
+    private int retryIntervalSeconds = 10;     // Valeur par défaut
+
+    // @ElementCollection crée automatiquement une table de liaison "agent_enabled_collectors"
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "agent_enabled_collectors", joinColumns = @JoinColumn(name = "agent_id"))
+    @Column(name = "collector_name")
+    private List<String> enabledCollectors = List.of(
+            "LogCollector",
+            "NetworkCollector",
+            "ProcessCollector",
+            "FileIntegrityCollector"
+    );
 }

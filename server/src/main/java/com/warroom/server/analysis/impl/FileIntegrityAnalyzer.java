@@ -1,5 +1,7 @@
 package com.warroom.server.analysis.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.warroom.server.analysis.EventAnalyzer;
 import com.warroom.server.entity.AlertRecord;
 import com.warroom.server.entity.SecurityEvent;
@@ -15,9 +17,16 @@ import java.util.Map;
 @Component
 public class FileIntegrityAnalyzer implements EventAnalyzer {
 
+    private final ObjectMapper objectMapper;
+
+    // Injection de Jackson pour parser le futur format JSON de l'agent
+    public FileIntegrityAnalyzer(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
     @Override
     public String supportedSourceType() {
-        return "file.integrity"; // La clé de routage exacte définie par ton binôme
+        return "file.integrity";
     }
 
     @Override
@@ -29,13 +38,20 @@ public class FileIntegrityAnalyzer implements EventAnalyzer {
             return alerts;
         }
 
-        // 1. Parsing du payload (Extraction des paires clé=valeur)
-        Map<String, String> fields = parsePayload(payload);
+        // 1. PARSING ROBUSTE (JSON prioritaire, Regex en fallback)
+        Map<String, String> fields;
+        try {
+            // Tente de lire le payload comme du JSON (La suggestion de ton binôme)
+            fields = objectMapper.readValue(payload, new TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            // Si l'agent n'a pas encore été mis à jour, on utilise le parseur Regex compatible avec les espaces
+            fields = parseLegacyPayload(payload);
+        }
 
         String action = fields.get("action");
         String file = fields.get("file");
 
-        // Si le log est mal formé, on l'ignore
+        // Si le log est illisible, on l'ignore
         if (action == null || file == null) {
             return alerts;
         }
@@ -46,14 +62,12 @@ public class FileIntegrityAnalyzer implements EventAnalyzer {
 
         // --- RÈGLES CRITIQUES (Fichiers vitaux) ---
         if (file.equals("/etc/shadow") || file.equals("/etc/sudoers")) {
-            // Correction Point 1 : Filtre explicite sur l'action
             if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
                 detectedSeverity = Severity.CRITICAL;
                 alertMessage = "Fichier système vital altéré (" + file + ") - Action : " + action;
             }
 
         } else if (file.equals("/etc/passwd")) {
-            // Ajout du DELETED pour passwd également (Correction Point 2)
             if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
                 detectedSeverity = Severity.CRITICAL;
                 alertMessage = "Modification ou Suppression de /etc/passwd (Backdoor ou Déni de service)";
@@ -82,7 +96,6 @@ public class FileIntegrityAnalyzer implements EventAnalyzer {
                 detectedSeverity = Severity.HIGH;
                 alertMessage = "Clé SSH ajoutée ou modifiée (Accès permanent potentiel sur " + file + ")";
             }
-            // Correction Point 3 : On n'est plus silencieux sur la suppression
             else if ("DELETED".equals(action)) {
                 detectedSeverity = Severity.MEDIUM;
                 alertMessage = "Clé SSH supprimée (Nettoyage de traces ou Déni de service sur " + file + ")";
@@ -99,7 +112,8 @@ public class FileIntegrityAnalyzer implements EventAnalyzer {
         if (detectedSeverity != null) {
             AlertRecord alert = new AlertRecord();
             alert.setAgent(event.getAgent());
-            alert.setEventId(event.getId()); // La traçabilité vers le log brut
+            alert.setRuleId("FIM-SSH-SHADOW-ETC");
+            alert.setEventId(event.getId());
             alert.setSeverity(detectedSeverity);
             alert.setMessage("INTÉGRITÉ COMPROMISE : " + alertMessage);
             alert.setCreatedAt(Instant.now());
@@ -112,20 +126,16 @@ public class FileIntegrityAnalyzer implements EventAnalyzer {
     }
 
     /**
-     * Méthode utilitaire pour parser "action=MODIFIED file=/etc/passwd old_hash=..."
+     * Parseur de secours utilisant une Regex magique.
+     * Il identifie une clé, le signe '=', et capture tout ce qui suit
+     * JUSQU'À la prochaine "clé=" ou la fin de la ligne.
+     * Résultat : les espaces dans les chemins de fichiers sont supportés !
      */
-    private Map<String, String> parsePayload(String payload) {
+    private Map<String, String> parseLegacyPayload(String payload) {
         Map<String, String> fields = new HashMap<>();
-        String[] parts = payload.split(" ");
-
-        for (String part : parts) {
-            int eqIndex = part.indexOf('=');
-            // On s'assure qu'il y a un '=' et qu'il n'est pas le premier caractère
-            if (eqIndex > 0) {
-                String key = part.substring(0, eqIndex);
-                String value = part.substring(eqIndex + 1);
-                fields.put(key, value);
-            }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\w+)=((?:(?!\\s+\\w+=).)+)").matcher(payload);
+        while (m.find()) {
+            fields.put(m.group(1), m.group(2).trim());
         }
         return fields;
     }

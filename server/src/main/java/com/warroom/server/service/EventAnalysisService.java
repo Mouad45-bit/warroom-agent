@@ -4,6 +4,8 @@ import com.warroom.server.analysis.EventAnalyzer;
 import com.warroom.server.entity.AlertRecord;
 import com.warroom.server.entity.SecurityEvent;
 import com.warroom.server.repository.AlertRecordRepository;
+import com.warroom.server.repository.SecurityEventRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,12 +14,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+
+@Slf4j
 @Service
 public class EventAnalysisService {
 
     // La clé est le sourceType, la valeur est une LISTE d'analyseurs abonnés à ce type
     private final Map<String, List<EventAnalyzer>> analyzers;
     private final AlertRecordRepository alertRepository;
+    private final SseNotificationService sseService;
 
     public EventAnalysisService(List<EventAnalyzer> analyzerList,
                                 AlertRecordRepository alertRepository) {
@@ -27,6 +32,7 @@ public class EventAnalysisService {
                 .collect(Collectors.groupingBy(EventAnalyzer::supportedSourceType));
 
         this.alertRepository = alertRepository;
+        this.sseService = new SseNotificationService();
     }
 
     @Transactional
@@ -42,6 +48,7 @@ public class EventAnalysisService {
                 // Optionnel : Affichage console pour le debug
                 for (AlertRecord alert : alerts) {
                     System.err.println(" ALERTE [" + alert.getSeverity() + "] : " + alert.getMessage());
+                    sseService.broadcast(alert);
                 }
             }
         }

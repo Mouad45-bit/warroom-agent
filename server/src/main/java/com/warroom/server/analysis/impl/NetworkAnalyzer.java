@@ -65,21 +65,21 @@ public class NetworkAnalyzer implements EventAnalyzer {
                 boolean isExternal = !isLocalNetwork(peerAddressFull);
 
                 if (isMaliciousPort && isSuspiciousProcess) {
-                    alerts.add(buildAlert(event, Severity.CRITICAL,
+                    alerts.add(buildAlert(event,"NET-REVSHELL-01", Severity.CRITICAL,
                             "REVERSE SHELL CONFIRMÉ : Processus offensif '" + processName + "' connecté au port pirate " + peerPort + " (" + peerAddressFull + ")"));
                 }
                 else if (isMaliciousPort) {
-                    alerts.add(buildAlert(event, Severity.CRITICAL,
+                    alerts.add(buildAlert(event,"NET-C2-PORT", Severity.CRITICAL,
                             "PORT PIRATE DÉTECTÉ : Connexion sortante vers le port " + peerPort + " (" + peerAddressFull + ") via '" + processName + "'"));
                 }
                 else if (isSuspiciousProcess && isExternal) {
-                    alerts.add(buildAlert(event, Severity.HIGH,
+                    alerts.add(buildAlert(event, "NET-SUSP-EXT",Severity.HIGH,
                             "PROCESSUS SUSPECT EN RÉSEAU : '" + processName + "' connecté à l'IP externe " + peerAddressFull + ":" + peerPort));
                 }
 
                 // CORRECTION : Règle C2 résiduelle et rétrogradation en MEDIUM
                 else if (!isStandardPort(peerPort) && isExternal && "unknown".equals(processName)) {
-                    alerts.add(buildAlert(event, Severity.MEDIUM,
+                    alerts.add(buildAlert(event,"NET-NEW-LISTEN", Severity.MEDIUM,
                             "Connexion vers port inhabituel " + peerPort + " (" + peerAddressFull + ") - processus non identifié"));
                 }
             }
@@ -93,10 +93,10 @@ public class NetworkAnalyzer implements EventAnalyzer {
                 if (!previousListenPorts.contains(localPort) && !previousListenPorts.isEmpty()) {
 
                     if (!isStandardPort(localPort)) {
-                        alerts.add(buildAlert(event, Severity.HIGH,
+                        alerts.add(buildAlert(event,"NET-NEW-LISTEN", Severity.HIGH,
                                 "NOUVEAU SERVICE SUSPECT : Port non-standard en écoute (" + localPort + ") par le processus '" + processName + "'"));
                     } else {
-                        alerts.add(buildAlert(event, Severity.MEDIUM,
+                        alerts.add(buildAlert(event,"NET-NEW-LISTEN", Severity.MEDIUM,
                                 "Nouveau service légitime démarré sur le port standard : " + localPort));
                     }
                 }
@@ -149,10 +149,11 @@ public class NetworkAnalyzer implements EventAnalyzer {
         return false;
     }
 
-    private AlertRecord buildAlert(SecurityEvent event, Severity severity, String message) {
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId,Severity severity, String message) {
         AlertRecord alert = new AlertRecord();
         alert.setAgent(event.getAgent());
         alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
         alert.setSeverity(severity);
         alert.setMessage(message);
         alert.setCreatedAt(Instant.now());

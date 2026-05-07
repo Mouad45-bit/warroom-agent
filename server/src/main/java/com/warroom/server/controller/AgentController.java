@@ -2,6 +2,7 @@ package com.warroom.server.controller;
 
 import com.warroom.server.dto.*;
 import com.warroom.server.service.AgentService;
+import lombok.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,13 +15,27 @@ public class AgentController {
 
     private final AgentService agentService;
 
+    // NOUVEAU : On injecte le secret depuis le fichier de configuration.
+    // Si la valeur n'est pas dans le fichier, on met une sécurité par défaut.
+    @Value("${warroom.enrollment.secret:super-secret-default-key}")
+    private String enrollmentSecret;
+
     public AgentController(AgentService agentService) {
         this.agentService = agentService;
     }
 
     //
     @PostMapping("/enroll")
-    public ResponseEntity<EnrollmentResponse> enroll(@RequestBody EnrollmentRequest request) {
+    public ResponseEntity<?> enroll(
+            @RequestHeader(value = "X-Enrollment-Secret", required = false) String providedSecret,
+            @RequestBody EnrollmentRequest request) {
+
+        // NOUVEAU : Vérification stricte du secret partagé
+        if (providedSecret == null || !providedSecret.equals(enrollmentSecret)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Accès refusé : Secret d'enrôlement manquant ou invalide.");
+        }
+
         EnrollmentResponse response = agentService.enrollAgent(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
