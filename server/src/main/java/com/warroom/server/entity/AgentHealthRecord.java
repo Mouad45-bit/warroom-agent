@@ -25,7 +25,16 @@ public class AgentHealthRecord {
     private Instant timestamp;
     private boolean isRunning;
 
-    @Column(columnDefinition = "TEXT")
-    private String snapshotData; // On stockera le JSON complet ici pour simplifier
+    // --- NOUVELLES MÉTRIQUES (Pour les graphiques du Dashboard) ---
+    private long queuedEvents;
+    private long deliveredEvents;
+    private long failedBatches;
+    private long droppedEvents;
+    private long enrollmentRetries;
+    private long configRefreshFailures;
+    private long componentRestarts;
 
+    // On garde ce champ TEXT pour stocker la liste des états des collecteurs (ComponentHealth)
+    @Column(columnDefinition = "TEXT")
+    private String snapshotData;
 }

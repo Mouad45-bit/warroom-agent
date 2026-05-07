@@ -1,5 +1,6 @@
 package com.warroom.server.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.warroom.server.dto.*;
 import com.warroom.server.entity.Agent;
 import com.warroom.server.entity.AgentHealthRecord;
@@ -20,6 +21,7 @@ public class AgentService {
     private final SecurityEventRepository eventRepository;
     private final AgentHealthRecordRepository healthRepository;
     private final EventAnalysisService eventAnalysisService;
+    private final ObjectMapper objectMapper;
 
     public AgentService(AgentRepository agentRepository,
                         SecurityEventRepository eventRepository,
@@ -29,6 +31,7 @@ public class AgentService {
         this.eventRepository = eventRepository;
         this.healthRepository = healthRepository;
         this.eventAnalysisService = eventAnalysisService;
+        this.objectMapper = new ObjectMapper();
     }
 
     // -------------------------------------------------------------------------
@@ -81,7 +84,7 @@ public class AgentService {
                 30,
                 100,
                 10,
-                List.of("LogCollector", "CommandCollector")
+                List.of("LogCollector", "NetworkCollector", "ProcessCollector", "FileIntegrityCollector")
         );
     }
 
@@ -90,28 +93,45 @@ public class AgentService {
     // -------------------------------------------------------------------------
 
     public void processHeartbeat(String agentId, AgentHealthSnapshotDto snapshot) {
-        // 1. Mettre à jour lastSeenAt sur l'agent
         agentRepository.findById(agentId).ifPresent(agent -> {
+            // 1. Mise à jour lastSeenAt
             agent.setLastSeenAt(Instant.now());
             agentRepository.save(agent);
-        });
 
-        // 2. Persister le snapshot en base
-        agentRepository.findById(agentId).ifPresent(agent -> {
+            // 2. Persistance du snapshot
             AgentHealthRecord record = new AgentHealthRecord();
             record.setAgent(agent);
             record.setTimestamp(Instant.now());
             record.setRunning(snapshot.running());
-            // On sérialise les infos utiles dans snapshotData
-            record.setSnapshotData(
-                    "queued=" + snapshot.queuedEvents()
-                            + " delivered=" + snapshot.deliveredEvents()
-            );
+
+            // On mappe les nouvelles colonnes numériques
+            record.setQueuedEvents(snapshot.queuedEvents());
+            record.setDeliveredEvents(snapshot.deliveredEvents());
+            record.setFailedBatches(snapshot.failedBatches());
+            record.setDroppedEvents(snapshot.droppedEvents());
+            record.setEnrollmentRetries(snapshot.enrollmentRetries());
+            record.setConfigRefreshFailures(snapshot.configRefreshFailures());
+            record.setComponentRestarts(snapshot.componentRestarts());
+
+            if (snapshot.componentHealth() != null) {
+                try {
+                    //transforme la liste Java en texte JSON propre
+                    String jsonArray = objectMapper.writeValueAsString(snapshot.componentHealth());
+                    record.setSnapshotData(jsonArray);
+                } catch (Exception e) {
+                    System.err.println("[Server] Erreur de sérialisation JSON : " + e.getMessage());
+                    record.setSnapshotData("[]");
+                }
+            } else {
+                record.setSnapshotData("[]");
+            }
+
             healthRepository.save(record);
         });
 
-        System.out.println("[Server] Heartbeat received from : "
-                + agentId + " | Active : " + snapshot.running());
+        System.out.println("[Server] Heartbeat from " + agentId
+                + " | running=" + snapshot.running()
+                + " | queued=" + snapshot.queuedEvents());
     }
 
     // -------------------------------------------------------------------------

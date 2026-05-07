@@ -1,15 +1,27 @@
 package com.warroom.server.dto;
 
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record AgentHealthSnapshotDto(
         String agentId,
         String hostname,
-        String timestamp,
+        Instant timestamp,
         boolean running,
         long queuedEvents,
         long deliveredEvents,
-        String lastSuccessfulDeliveryAt,
-        String startedAt,
-        List<ComponentHealthDto> componentHealth
+        Instant lastSuccessfulDeliveryAt,
+        Instant startedAt,
+        List<ComponentHealthDto> componentHealth,
+        long failedBatches,
+        long droppedEvents,
+        long enrollmentRetries,
+        long configRefreshFailures,
+        long componentRestarts,
+        Set<String> quarantinedComponents
+
 ) {}
