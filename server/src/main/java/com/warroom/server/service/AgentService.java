@@ -8,6 +8,7 @@ import com.warroom.server.entity.SecurityEvent;
 import com.warroom.server.repository.AgentHealthRecordRepository;
 import com.warroom.server.repository.AgentRepository;
 import com.warroom.server.repository.SecurityEventRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -91,7 +92,7 @@ public class AgentService {
     // -------------------------------------------------------------------------
     // HEARTBEAT
     // -------------------------------------------------------------------------
-
+    @Transactional
     public void processHeartbeat(String agentId, AgentHealthSnapshotDto snapshot) {
         agentRepository.findById(agentId).ifPresent(agent -> {
             // 1. Mise à jour lastSeenAt
@@ -137,7 +138,7 @@ public class AgentService {
     // -------------------------------------------------------------------------
     // EVENTS
     // -------------------------------------------------------------------------
-
+    @Transactional
     public void processEvents(String agentId, List<EnvelopedEventDto> events) {
         if (events == null || events.isEmpty()) return;
 
