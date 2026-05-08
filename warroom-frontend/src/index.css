@@ -2,15 +2,28 @@
    STYLES GLOBAUX — WarRoom SOC Platform
    ══════════════════════════════════════════════════════════ */
 
-/* 1. Importation globale de Tailwind v4 */
 @import "tailwindcss";
 
-/* 2. Configuration du thème (remplace tailwind.config.js) */
 @theme {
+  /* ── Police de caractères ── */
   --font-sans: "Inter", sans-serif;
+
+  /* ══════════════════════════════════════════════════════
+     COULEUR PRINCIPALE : Emerald Green (#00674F)
+     ══════════════════════════════════════════════════════ */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #00674F; /* ← Couleur principale exacte */
+  --color-brand-700: #005540;
+  --color-brand-800: #004434;
+  --color-brand-900: #003328;
 }
 
-/* 3. Surcharges de base */
+/* ── Styles de base ──────────────────────────────────────── */
 @layer base {
   /* Supprime les spinners des inputs number (pour la pagination) */
   input[type='number']::-webkit-inner-spin-button,
@@ -20,10 +33,9 @@
   }
 }
 
-/* 4. Animations sur mesure (SSE) */
+/* ── Animation pour les nouvelles alertes SSE ────────────── */
 @layer utilities {
   @keyframes flash-alert {
-    /* Dans v4, on accède aux couleurs natives via var() */
     0%   { background-color: var(--color-amber-100); }
     100% { background-color: transparent; }
   }
