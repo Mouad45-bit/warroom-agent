@@ -10,7 +10,6 @@
 
     <modules>
         <module>agent</module>
-        <module>server</module>
     </modules>
 
     <properties>
