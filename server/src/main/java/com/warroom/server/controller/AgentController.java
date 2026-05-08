@@ -2,7 +2,7 @@ package com.warroom.server.controller;
 
 import com.warroom.server.dto.*;
 import com.warroom.server.service.AgentService;
-import lombok.Value;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
