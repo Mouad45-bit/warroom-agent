@@ -14,19 +14,29 @@
 //  Contraintes de rôle :
 //    - MANAGER ne peut créer/désactiver que des L1 et L2
 //    - ADMIN ne peut pas désactiver son propre compte
-//    - On ne peut pas désactiver le dernier ADMIN
+//    - ADMIN ne peut activer/désactiver que [MANAGER, L1, L2] (ne peut pas toucher aux autres ADMIN)
+//    - MANAGER ne peut activer/désactiver que [L1, L2]
 // ══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import CreateUserModal from '../components/CreateUserModal'; // <-- IMPORT AJOUTÉ ICI
+import CreateUserModal from '../components/CreateUserModal';
+import ConfirmModal from "../components/ConfirmModal.jsx";
+import { mockGetUsers, mockDisableUser } from '../api/mockAuth';
 import {
     UserPlus,
     Loader2,
     CheckCircle2,
     ShieldOff,
-} from 'lucide-react'; // Imports nettoyés
+} from 'lucide-react';
+
+// ══════════════════════════════════════════════════════════════
+// ⚙️ CONFIGURATION DE L'ENVIRONNEMENT
+// true = Utilise les fausses données (pour coder l'UI)
+// false = Utilise le vrai backend Spring Boot
+// ══════════════════════════════════════════════════════════════
+const USE_MOCK_API = true;
 
 export default function UsersPage() {
     const { user: currentUser } = useAuth();
@@ -36,12 +46,28 @@ export default function UsersPage() {
     const [loadingList, setLoadingList] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
 
+    // État pour la modale de confirmation
+    const [confirmDialog, setConfirmDialog] = useState({
+        isOpen: false,
+        userId: null,
+        actionType: null, // 'disable' ou 'enable'
+        title: '',
+        message: '',
+        type: 'danger', // 'danger' ou 'success'
+        confirmText: ''
+    });
+
     // ── Chargement de la liste ──────────────────────────────
     const fetchUsers = useCallback(async () => {
         setLoadingList(true);
         try {
-            const res = await api.get('/api/admin/users');
-            setUsers(res.data);
+            if (USE_MOCK_API) {
+                const data = await mockGetUsers();
+                setUsers(data);
+            } else {
+                const res = await api.get('/api/admin/users');
+                setUsers(res.data);
+            }
         } catch (err) {
             console.error('Erreur chargement utilisateurs :', err);
         }
@@ -52,18 +78,64 @@ export default function UsersPage() {
         fetchUsers();
     }, [fetchUsers]);
 
-    // ── Désactivation d'un compte ───────────────────────────
-    const handleDisable = async (userId) => {
-        if (!window.confirm('Voulez-vous vraiment désactiver ce compte ?')) return;
+    // ── Préparation des actions (Ouverture de la modale) ────
+    const requestDisable = (userId) => {
+        setConfirmDialog({
+            isOpen: true,
+            userId,
+            actionType: 'disable',
+            title: 'Désactiver le compte',
+            message: 'Cet utilisateur ne pourra plus se connecter à la plateforme. Confirmez-vous cette action ?',
+            type: 'danger',
+            confirmText: 'Désactiver'
+        });
+    };
+
+    const requestEnable = (userId) => {
+        setConfirmDialog({
+            isOpen: true,
+            userId,
+            actionType: 'enable',
+            title: 'Activer le compte',
+            message: 'Cet utilisateur récupérera ses accès à la plateforme. Confirmez-vous cette action ?',
+            type: 'success',
+            confirmText: 'Activer'
+        });
+    };
+
+    // ── Exécution de l'action confirmée ─────────────────────
+    const executeAction = async () => {
+        const { userId, actionType } = confirmDialog;
+
+        // Fermer la modale immédiatement
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
 
         try {
-            await api.put(`/api/admin/users/${userId}/disable`);
-            // Recharger la liste pour refléter le changement
-            fetchUsers();
+            if (actionType === 'disable') {
+                if (USE_MOCK_API) await mockDisableUser(userId);
+                else await api.put(`/api/admin/users/${userId}/disable`);
+            } else if (actionType === 'enable') {
+                if (USE_MOCK_API) await mockEnableUser(userId);
+                else await api.put(`/api/admin/users/${userId}/enable`);
+            }
+            fetchUsers(); // Rafraîchir le tableau
         } catch (err) {
-            const msg = err.response?.data?.message || 'Erreur lors de la désactivation.';
+            const msg = err.response?.data?.message || 'Erreur lors de l\'action.';
             alert(msg);
         }
+    };
+
+    // ── Vérification des droits d'action sur un compte ──────
+    const canToggleStatus = (targetRole) => {
+        const currentRole = currentUser?.role;
+
+        if (currentRole === 'ADMIN') {
+            return ['MANAGER', 'L1', 'L2'].includes(targetRole);
+        }
+        if (currentRole === 'MANAGER') {
+            return ['L1', 'L2'].includes(targetRole);
+        }
+        return false;
     };
 
     // ── Les rôles que l'utilisateur connecté peut créer ─────
@@ -81,7 +153,7 @@ export default function UsersPage() {
                 </h1>
                 <button
                     onClick={() => setShowCreateModal(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors cursor-pointer"
                 >
                     <UserPlus className="w-4 h-4" />
                     Créer un compte
@@ -99,11 +171,11 @@ export default function UsersPage() {
                         <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                             <th className="px-6 py-4">Utilisateur</th>
-                            <th className="px-6 py-4">Rôle</th>
+                            <th className="px-6 py-4 text-center">Rôle</th>
                             <th className="px-6 py-4">Email</th>
                             <th className="px-6 py-4">Statut</th>
                             <th className="px-6 py-4">Dernière connexion</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
+                            <th className="px-6 py-4">Actions</th>
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
@@ -123,7 +195,7 @@ export default function UsersPage() {
                                 </td>
 
                                 {/* Rôle */}
-                                <td className="px-6 py-4">
+                                <td className="px-6 py-4 text-center uppercase">
                                     <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-600">
                                       {u.role}
                                     </span>
@@ -157,14 +229,23 @@ export default function UsersPage() {
                                 </td>
 
                                 {/* Actions */}
-                                <td className="px-6 py-4 text-right">
-                                    {u.active && u.userId !== currentUser?.userId && (
-                                        <button
-                                            onClick={() => handleDisable(u.userId)}
-                                            className="text-xs font-medium text-red-600 hover:text-red-700 hover:underline transition-colors"
-                                        >
-                                            Désactiver
-                                        </button>
+                                <td className="px-6 py-4 text-left">
+                                    {canToggleStatus(u.role) && (
+                                        u.active ? (
+                                            <button
+                                                onClick={() => requestDisable(u.userId)}
+                                                className="text-xs font-medium text-red-600 hover:text-red-700 hover:underline transition-colors cursor-pointer"
+                                            >
+                                                Désactiver
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => requestEnable(u.userId)}
+                                                className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline transition-colors cursor-pointer"
+                                            >
+                                                Activer
+                                            </button>
+                                        )
                                     )}
                                 </td>
                             </tr>
@@ -175,8 +256,8 @@ export default function UsersPage() {
             </div>
 
             {/* ══════════════════════════════════════════════════════
-              MODALE DE CRÉATION DE COMPTE (Composant importé)
              ══════════════════════════════════════════════════════ */}
+            {/* Modale de création */}
             {showCreateModal && (
                 <CreateUserModal
                     roles={creatableRoles}
@@ -187,6 +268,17 @@ export default function UsersPage() {
                     }}
                 />
             )}
+
+            {/* Modale de confirmation (Désactiver / Activer) */}
+            <ConfirmModal
+                isOpen={confirmDialog.isOpen}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                type={confirmDialog.type}
+                confirmText={confirmDialog.confirmText}
+                onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+                onConfirm={executeAction}
+            />
         </div>
     );
 }

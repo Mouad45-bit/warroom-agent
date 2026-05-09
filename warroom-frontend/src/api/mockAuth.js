@@ -65,3 +65,8 @@ export const mockDisableUser = async (userId) => {
     // mais ici on simule juste le fait que l'API réponde OK 200)
     return { success: true };
 };
+
+export const mockEnableUser = async (userId) => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { success: true };
+};
