@@ -46,7 +46,7 @@ import {
     mockAddNote,
     mockGetL2Users,
     getAllowedTransitions,
-} from '../api/mockIncidents';
+} from '../api/mock/mockIncidents.js';
 import {
     Search,
     Filter,

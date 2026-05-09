@@ -37,7 +37,7 @@ import EscalateModal from '../components/EscalateModal';
 import {
     mockCreateIncident,
     mockGetL2Users,
-} from '../api/mockIncidents';
+} from '../api/mock/mockIncidents.js';
 
 import { Search, Filter, Loader2, RotateCcw } from 'lucide-react';
 
