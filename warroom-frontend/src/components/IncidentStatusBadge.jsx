@@ -11,7 +11,7 @@
 //    CLOSED                → gris ("clôturé")
 //    CLOSED_FALSE_POSITIVE → gris clair barré ("faux positif")
 //
-//  Reprend la structure du StatusBadge.jsx du Module 1 pour
+//  Reprend la structure du AlertStatusBadge.jsx du Module 1 pour
 //  garantir une cohérence visuelle dans toute la plateforme.
 // ══════════════════════════════════════════════════════════════
 

@@ -33,7 +33,7 @@
 
 import { useState, useEffect } from 'react';
 import SeverityBadge from './SeverityBadge';
-import StatusBadge from './StatusBadge';
+import AlertStatusBadge from './ui/alerts/AlertStatusBadge.jsx';
 import {
     X,
     Loader2,
@@ -43,16 +43,17 @@ import {
     ArrowUpRight,
 } from 'lucide-react';
 
-export default function AlertDetailModal({
-                                             isOpen,
-                                             alertDetail,
-                                             loading,
-                                             isL1,
-                                             onClose,
-                                             onNavigate,
-                                             onAcknowledge,
-                                             onFalsePositive,
-                                         }) {
+export default function AlertDetailModal
+    ({
+         isOpen,
+         alertDetail,
+         loading,
+         isL1,
+         onClose,
+         onNavigate,
+         onAcknowledge,
+         onFalsePositive,
+     }) {
     // ══════════════════════════════════════════════════════════
     //  HISTORIQUE DE NAVIGATION
     // ══════════════════════════════════════════════════════════
@@ -119,7 +120,7 @@ export default function AlertDetailModal({
                             <div>
                                 <div className="flex items-center gap-2">
                                     <SeverityBadge severity={alert.severity} />
-                                    <StatusBadge status={alert.status} />
+                                    <AlertStatusBadge status={alert.status} />
                                 </div>
                                 <p className="text-xs text-gray-400 font-mono mt-1">
                                     {alert.ruleId} · #{alert.id}

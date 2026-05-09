@@ -1,4 +1,4 @@
-// /src/components/StatusBadge.jsx
+// /src/components/AlertStatusBadge.jsx
 
 // ══════════════════════════════════════════════════════════════
 //  BADGE DE STATUT D'ALERTE
@@ -29,7 +29,7 @@ const STATUS_CONFIG = {
     },
 };
 
-export default function StatusBadge({ status }) {
+export default function AlertStatusBadge({ status }) {
     const config = STATUS_CONFIG[status] || STATUS_CONFIG.NEW;
 
     return (

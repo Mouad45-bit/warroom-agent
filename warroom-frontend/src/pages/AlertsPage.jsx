@@ -21,7 +21,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import useSSE from '../hooks/useSSE';
 import SeverityBadge from '../components/SeverityBadge';
-import StatusBadge from '../components/StatusBadge';
+import AlertStatusBadge from '../components/ui/alerts/AlertStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/ConfirmModal';
 import FalsePositiveModal from '../components/FalsePositiveModal';
@@ -357,7 +357,7 @@ export default function AlertsPage() {
                                     <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">{a.sourceType || '—'}</td>
                                     <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">{a.ruleId}</td>
                                     <td className="px-6 py-3.5 text-gray-700 max-w-xs truncate">{a.message}</td>
-                                    <td className="px-6 py-3.5 text-center"><StatusBadge status={a.status} /></td>
+                                    <td className="px-6 py-3.5 text-center"><AlertStatusBadge status={a.status} /></td>
                                 </tr>
                             ))}
                             </tbody>
