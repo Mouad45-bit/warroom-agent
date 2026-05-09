@@ -26,7 +26,19 @@ import Pagination from '../components/Pagination';
 import ConfirmModal from '../components/ConfirmModal';
 import FalsePositiveModal from '../components/FalsePositiveModal';
 import AlertDetailModal from '../components/AlertDetailModal';
-import { mockGetAlerts, mockGetAlertDetail, mockAcknowledgeAlert, mockFalsePositiveAlert } from '../api/mockAlerts';
+import {
+    mockGetAlerts,
+    mockGetAlertDetail,
+    mockAcknowledgeAlert,
+    mockFalsePositiveAlert
+} from '../api/mockAlerts';
+//
+import EscalateModal from '../components/EscalateModal';
+import {
+    mockCreateIncident,
+    mockGetL2Users,
+} from '../api/mockIncidents';
+
 import { Search, Filter, Loader2, RotateCcw } from 'lucide-react';
 
 //
@@ -67,6 +79,37 @@ export default function AlertsPage() {
     const [fpModal, setFpModal] = useState({ isOpen: false, alertId: null });
     const [fpError, setFpError] = useState(null);
     const [fpSubmitting, setFpSubmitting] = useState(false);
+
+    // ══════════════════════════════════════════════════════════
+    //  MODALE D'ESCALADE (Module 2)
+    // ══════════════════════════════════════════════════════════
+    const [escalateModal, setEscalateModal] = useState({
+        isOpen: false,
+        alert: null,
+    });
+    const [escalateError, setEscalateError] = useState(null);
+    const [escalateSubmitting, setEscalateSubmitting] = useState(false);
+    const [l2Users, setL2Users] = useState([]);
+
+    // Charger les L2 au montage (pour le dropdown d'assignation)
+    useEffect(() => {
+        const loadL2Users = async () => {
+            try {
+                if (USE_MOCK_API) {
+                    const users = await mockGetL2Users();
+                    setL2Users(users);
+                } else {
+                    const res = await api.get('/api/admin/users');
+                    setL2Users(res.data.filter(u => u.role === 'L2' && u.active).map(u => ({
+                        userId: u.userId, fullName: u.fullName,
+                    })));
+                }
+            } catch (err) {
+                console.error('Erreur chargement L2 :', err);
+            }
+        };
+        loadL2Users();
+    }, []);
 
     // ══════════════════════════════════════════════════════════
     //  CHARGEMENT LISTE
@@ -171,6 +214,46 @@ export default function AlertsPage() {
             setFpModal({ isOpen: false, alertId: null });
         } catch (err) { setFpError(err.message || 'Erreur.'); }
         setFpSubmitting(false);
+    };
+
+    // ══════════════════════════════════════════════════════════
+    //  ACTION : ESCALADER EN INCIDENT (Module 2)
+    // ══════════════════════════════════════════════════════════
+    const openEscalateModal = () => {
+        if (!alertDetail?.alert) return;
+        setEscalateError(null);
+        setEscalateModal({ isOpen: true, alert: alertDetail.alert });
+    };
+
+    const handleEscalate = async ({ title, severity, triageNote, assignedToUserId, alertIds }) => {
+        setEscalateError(null);
+        setEscalateSubmitting(true);
+        try {
+            if (USE_MOCK_API) {
+                await mockCreateIncident({ title, severity, triageNote, assignedToUserId, alertIds });
+            } else {
+                // Utilise l'endpoint raccourci depuis le détail d'alerte
+                await api.put(`/api/alerts/${alertDetail.alert.id}/escalate`, {
+                    title,
+                    severity,
+                    triageNote,
+                    assignedToUserId,
+                    additionalAlertIds: alertIds.filter(id => id !== alertDetail.alert.id),
+                });
+            }
+
+            // Mise à jour locale : marquer les alertes comme escaladées
+            setAlerts(prev => prev.map(a =>
+                alertIds.includes(a.id) ? { ...a, status: 'ESCALATED' } : a
+            ));
+
+            // Fermer le détail et la modale
+            closeDetail();
+            setEscalateModal({ isOpen: false, alert: null });
+        } catch (err) {
+            setEscalateError(err.response?.data?.message || 'Erreur lors de l\'escalade.');
+        }
+        setEscalateSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -287,15 +370,45 @@ export default function AlertsPage() {
             </div>
 
             {/* ── Modales (fichiers séparés) ────────────────────── */}
-            <AlertDetailModal isOpen={detailOpen} alertDetail={alertDetail} loading={loadingDetail} isL1={isL1}
-                              onClose={closeDetail} onNavigate={navigateDetail} onAcknowledge={requestAcknowledge} onFalsePositive={openFPModal} />
+            <AlertDetailModal
+                isOpen={detailOpen}
+                alertDetail={alertDetail}
+                loading={loadingDetail}
+                isL1={isL1}
+                onClose={closeDetail}
+                onNavigate={navigateDetail}
+                onAcknowledge={requestAcknowledge}
+                onFalsePositive={openFPModal}
+            />
 
-            <ConfirmModal isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
-                          type={confirmDialog.type} confirmText={confirmDialog.confirmText}
-                          onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} onConfirm={executeAcknowledge} />
+            <ConfirmModal
+                isOpen={confirmDialog.isOpen}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                type={confirmDialog.type}
+                confirmText={confirmDialog.confirmText}
+                onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={executeAcknowledge}
+            />
 
-            <FalsePositiveModal isOpen={fpModal.isOpen} onClose={() => setFpModal({ isOpen: false, alertId: null })}
-                                onConfirm={handleFalsePositive} submitting={fpSubmitting} error={fpError} />
+            <FalsePositiveModal
+                isOpen={fpModal.isOpen}
+                onClose={() => setFpModal({ isOpen: false, alertId: null })}
+                onConfirm={handleFalsePositive}
+                submitting={fpSubmitting}
+                error={fpError}
+            />
+
+            <EscalateModal
+                isOpen={escalateModal.isOpen}
+                alert={escalateModal.alert}
+                relatedAlerts={alertDetail?.relatedAlerts || []}
+                l2Users={l2Users}
+                onClose={() => setEscalateModal({ isOpen: false, alert: null })}
+                onConfirm={handleEscalate}
+                submitting={escalateSubmitting}
+                error={escalateError}
+            />
         </div>
     );
 }
