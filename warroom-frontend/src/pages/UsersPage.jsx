@@ -20,13 +20,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import CreateUserModal from '../components/CreateUserModal'; // <-- IMPORT AJOUTÉ ICI
+import CreateUserModal from '../components/CreateUserModal';
+import { mockGetUsers, mockDisableUser } from '../api/mockAuth'; // <-- IMPORT DU MOCK
 import {
     UserPlus,
     Loader2,
     CheckCircle2,
     ShieldOff,
-} from 'lucide-react'; // Imports nettoyés
+} from 'lucide-react';
+
+// ══════════════════════════════════════════════════════════════
+// ⚙️ CONFIGURATION DE L'ENVIRONNEMENT
+// true = Utilise les fausses données (pour coder l'UI)
+// false = Utilise le vrai backend Spring Boot
+// ══════════════════════════════════════════════════════════════
+const USE_MOCK_API = true;
 
 export default function UsersPage() {
     const { user: currentUser } = useAuth();
@@ -40,8 +48,14 @@ export default function UsersPage() {
     const fetchUsers = useCallback(async () => {
         setLoadingList(true);
         try {
-            const res = await api.get('/api/admin/users');
-            setUsers(res.data);
+            if (USE_MOCK_API) {
+                const data = await mockGetUsers();
+                setUsers(data);
+            } else {
+                // VRAI APPEL API
+                const res = await api.get('/api/admin/users');
+                setUsers(res.data);
+            }
         } catch (err) {
             console.error('Erreur chargement utilisateurs :', err);
         }
@@ -57,7 +71,12 @@ export default function UsersPage() {
         if (!window.confirm('Voulez-vous vraiment désactiver ce compte ?')) return;
 
         try {
-            await api.put(`/api/admin/users/${userId}/disable`);
+            if (USE_MOCK_API) {
+                await mockDisableUser(userId);
+            } else {
+                // VRAI APPEL API
+                await api.put(`/api/admin/users/${userId}/disable`);
+            }
             // Recharger la liste pour refléter le changement
             fetchUsers();
         } catch (err) {
