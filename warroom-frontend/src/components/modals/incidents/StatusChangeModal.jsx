@@ -25,7 +25,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ArrowRight, Undo2 } from 'lucide-react';
-import IncidentStatusBadge from './ui/incidents/IncidentStatusBadge.jsx';
+import IncidentStatusBadge from '../../ui/incidents/IncidentStatusBadge.jsx';
 
 // Labels français pour les statuts
 const STATUS_LABELS = {

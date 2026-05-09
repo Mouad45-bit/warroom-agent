@@ -30,7 +30,7 @@ import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import IncidentStatusBadge from '../components/ui/incidents/IncidentStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
-import StatusChangeModal from '../components/StatusChangeModal';
+import StatusChangeModal from '../components/modals/incidents/StatusChangeModal.jsx';
 import ReassignModal from '../components/modals/incidents/ReassignModal.jsx';
 import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx';
 import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
