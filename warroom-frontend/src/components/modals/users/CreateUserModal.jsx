@@ -1,7 +1,7 @@
 // /src/components/CreateUserModal.jsx
 
 import { useState } from 'react';
-import api from '../api/client';
+import api from '../../../api/client.js';
 import { X, Loader2, AlertTriangle } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
