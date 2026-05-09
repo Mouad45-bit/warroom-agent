@@ -32,7 +32,7 @@ import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import StatusChangeModal from '../components/StatusChangeModal';
 import ReassignModal from '../components/modals/incidents/ReassignModal.jsx';
-import ReturnToL1Modal from '../components/ReturnToL1Modal';
+import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx';
 import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import {
