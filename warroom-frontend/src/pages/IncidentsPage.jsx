@@ -29,7 +29,7 @@ import { useAuth } from '../context/AuthContext';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import IncidentStatusBadge from '../components/ui/incidents/IncidentStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
-import ConfirmModal from '../components/ConfirmModal';
+import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import StatusChangeModal from '../components/StatusChangeModal';
 import ReassignModal from '../components/ReassignModal';
 import ReturnToL1Modal from '../components/ReturnToL1Modal';

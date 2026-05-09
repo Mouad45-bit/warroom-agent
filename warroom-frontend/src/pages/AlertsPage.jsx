@@ -23,7 +23,7 @@ import useSSE from '../hooks/useSSE';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import AlertStatusBadge from '../components/ui/alerts/AlertStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
-import ConfirmModal from '../components/ConfirmModal';
+import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import FalsePositiveModal from '../components/FalsePositiveModal';
 import AlertDetailModal from '../components/AlertDetailModal';
 import {
