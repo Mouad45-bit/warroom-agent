@@ -33,7 +33,7 @@ export default function Pagination({ page, totalPages, totalElements, onPageChan
                 <button
                     onClick={() => onPageChange(page - 1)}
                     disabled={page === 0}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                     <ChevronLeft className="w-4 h-4" />
                     Précédent
@@ -41,7 +41,7 @@ export default function Pagination({ page, totalPages, totalElements, onPageChan
                 <button
                     onClick={() => onPageChange(page + 1)}
                     disabled={page >= totalPages - 1}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                     Suivant
                     <ChevronRight className="w-4 h-4" />
