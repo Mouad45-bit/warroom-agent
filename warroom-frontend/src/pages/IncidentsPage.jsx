@@ -27,7 +27,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
-import IncidentStatusBadge from '../components/IncidentStatusBadge';
+import IncidentStatusBadge from '../components/ui/incidents/IncidentStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/ConfirmModal';
 import StatusChangeModal from '../components/StatusChangeModal';
