@@ -1,68 +1,90 @@
-// /src/App.jsx
+// ══════════════════════════════════════════════════════════════
+//  APPLICATION PRINCIPALE — Routeur & Structure
+// ══════════════════════════════════════════════════════════════
+//
+//  Arbre de composants :
+//    <AuthProvider>           ← Contexte d'authentification
+//      <BrowserRouter>        ← Routeur React
+//        /login               ← Page publique
+//        <Layout>             ← Sidebar + zone de contenu (protégé)
+//          /                  ← Tableau de bord (tous les rôles)
+//          /alerts            ← File d'alertes (L1, L2, MANAGER)
+//          /incidents         ← Incidents (L1, L2, MANAGER) — placeholder
+//          /agents            ← Supervision (MANAGER, ADMIN) — placeholder
+//          /admin/users       ← Gestion comptes (MANAGER, ADMIN)
+//        </Layout>
+//
+//  Les routes protégées utilisent <ProtectedRoute> qui vérifie
+//  la session ET le rôle avant de rendre le composant enfant.
+//
+//  La navigation visible dans la Sidebar est contrôlée séparément
+//  dans Layout.jsx — même si un L1 tape /admin/users dans l'URL,
+//  ProtectedRoute le redirigera vers le dashboard.
+// ══════════════════════════════════════════════════════════════
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
+
+// Pages
 import LoginPage from './pages/LoginPage';
+/*
+import DashboardPage from './pages/DashboardPage';
+import AlertsPage from './pages/AlertsPage';
+import IncidentsPage from './pages/IncidentsPage';
+import AgentsPage from './pages/AgentsPage';
+ */
+import UsersPage from './pages/UsersPage';
 
-// ══════════════════════════════════════════════════════════════
-//  COMPOSANT TEMPORAIRE DE TEST
-//  Sert uniquement à vérifier que la session est bien établie.
-// ══════════════════════════════════════════════════════════════
-function TempDashboard() {
-    const { user, logout, loading } = useAuth();
-
-    // 1. Pendant la vérification du cookie initial
-    if (loading) {
-        return <div className="p-8 text-gray-500">Vérification de la session...</div>;
-    }
-
-    // 2. Si non connecté, on le renvoie au login
-    if (!user) {
-        return <Navigate to="/login" replace />;
-    }
-
-    // 3. Si connecté, on affiche ses infos et un bouton de déconnexion
-    return (
-        <div className="min-h-screen bg-gray-50 p-8">
-            <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-                <h1 className="text-2xl font-bold text-green-600 mb-6 flex items-center gap-2">
-                    🎉 Connexion réussie !
-                </h1>
-
-                <div className="mb-6">
-                    <p className="text-sm text-gray-500 mb-2">Données de session renvoyées par Spring Boot :</p>
-                    <pre className="bg-gray-900 text-green-400 p-4 rounded-xl text-sm overflow-auto">
-            {JSON.stringify(user, null, 2)}
-          </pre>
-                </div>
-
-                <button
-                    onClick={logout}
-                    className="px-4 py-2 bg-red-50 text-red-600 font-medium rounded-xl hover:bg-red-100 transition-colors"
-                >
-                    Se déconnecter
-                </button>
-            </div>
-        </div>
-    );
-}
-
-// ══════════════════════════════════════════════════════════════
-//  APPLICATION PRINCIPALE (Version de Test)
-// ══════════════════════════════════════════════════════════════
 export default function App() {
     return (
+        // AuthProvider enveloppe tout : le contexte est accessible partout.
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
-                    {/* Route publique */}
+                    {/* ── Route publique : page de login ──────────── */}
                     <Route path="/login" element={<LoginPage />} />
 
-                    {/* Route protégée temporaire */}
-                    <Route path="/" element={<TempDashboard />} />
+                    {/* ── Routes protégées : nécessitent une session ── */}
+                    {/* Le Layout (Sidebar + contenu) s'affiche pour toutes
+              les routes enfants via <Outlet />. */}
+                    <Route element={<ProtectedRoute />}>
+                        <Route element={<Layout />}>
 
-                    {/* Fallback pour les URL inconnues */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                            {/* Tableau de bord — tous les rôles */}
+                            {/*
+                            <Route path="/" element={<DashboardPage />} />
+                            */}
+
+                            {/* File d'alertes — L1, L2, MANAGER (contrat §6) */}
+                            {/*
+                            <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']} />}>
+                                <Route path="/alerts" element={<AlertsPage />} />
+                            </Route>
+                            */}
+
+                            {/* Incidents — L1, L2, MANAGER (placeholder Module 2) */}
+                            {/*
+                            <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']} />}>
+                                <Route path="/incidents" element={<IncidentsPage />} />
+                            </Route>
+                            */}
+
+                            {/* Supervision agents — MANAGER, ADMIN (placeholder Module 5) */}
+                            {/*
+                            <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
+                                <Route path="/agents" element={<AgentsPage />} />
+                            </Route>
+                            */}
+
+                            {/* Administration des comptes — MANAGER, ADMIN */}
+                            <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
+                                <Route path="/admin/users" element={<UsersPage />} />
+                            </Route>
+
+                        </Route>
+                    </Route>
                 </Routes>
             </BrowserRouter>
         </AuthProvider>
