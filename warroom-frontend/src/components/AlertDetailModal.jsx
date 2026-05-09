@@ -260,15 +260,10 @@ export default function AlertDetailModal({
                                         Faux positif
                                     </button>
 
-                                    {/* Escalader — désactivé (Module 2) */}
-                                    <button
-                                        disabled
-                                        title="Disponible au prochain module"
-                                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-gray-400 text-sm font-medium rounded-xl border border-gray-100 bg-gray-50 cursor-not-allowed"
-                                    >
+                                    <button onClick={openEscalateModal}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-purple-700 text-sm font-medium rounded-xl border border-purple-200 hover:bg-purple-50 transition-colors cursor-pointer">
                                         <ArrowUpRight className="w-4 h-4" />
                                         Escalader en incident
-                                        <span className="text-xs opacity-60">(Module 2)</span>
                                     </button>
                                 </div>
                             )}
