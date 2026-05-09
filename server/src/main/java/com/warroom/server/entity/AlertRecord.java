@@ -1,5 +1,6 @@
 package com.warroom.server.entity;
 
+import com.warroom.server.model.AlertStatus;
 import com.warroom.server.model.Severity;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -16,13 +17,9 @@ public class AlertRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 1. LE CHAMP MANQUANT : La traçabilité
-    // Permet de relier cette alerte au log brut exact qui l'a déclenchée
     private Long eventId;
-
     private String ruleId;
 
-    // 2. LE BOUCLIER LOMBOK
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_id", nullable = false)
@@ -31,7 +28,18 @@ public class AlertRecord {
     @Enumerated(EnumType.STRING)
     private Severity severity;
 
+    @Enumerated(EnumType.STRING)
+    private AlertStatus status;        // ← remplace acknowledged
+
     private String message;
     private Instant createdAt;
-    private boolean acknowledged;
+
+    // --- Champs humains (remplis par le L1 via l'API) ---
+    private Long qualifiedByUserId;    // ID du L1 qui a traité
+    private Instant qualifiedAt;       // Horodatage du traitement
+
+    @Column(columnDefinition = "TEXT")
+    private String justification;      // Obligatoire pour FALSE_POSITIVE
+
+    private Long incidentId;           // Lien vers l'incident (Module 2)
 }

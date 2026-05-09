@@ -1,5 +1,6 @@
 package com.warroom.server.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,6 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "agents")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Agent {
 
     @Id // La clé primaire (ex: agt-a1b2c3d4)
