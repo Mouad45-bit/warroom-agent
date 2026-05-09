@@ -28,7 +28,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import SeverityBadge from '../components/SeverityBadge';
 import IncidentStatusBadge from '../components/IncidentStatusBadge';
-import Pagination from '../components/Pagination';
+import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/ConfirmModal';
 import StatusChangeModal from '../components/StatusChangeModal';
 import ReassignModal from '../components/ReassignModal';

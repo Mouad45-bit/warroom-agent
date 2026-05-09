@@ -22,7 +22,7 @@ import { useAuth } from '../context/AuthContext';
 import useSSE from '../hooks/useSSE';
 import SeverityBadge from '../components/SeverityBadge';
 import StatusBadge from '../components/StatusBadge';
-import Pagination from '../components/Pagination';
+import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/ConfirmModal';
 import FalsePositiveModal from '../components/FalsePositiveModal';
 import AlertDetailModal from '../components/AlertDetailModal';
