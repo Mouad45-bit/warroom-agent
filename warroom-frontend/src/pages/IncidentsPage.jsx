@@ -33,7 +33,7 @@ import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import StatusChangeModal from '../components/StatusChangeModal';
 import ReassignModal from '../components/ReassignModal';
 import ReturnToL1Modal from '../components/ReturnToL1Modal';
-import CloseIncidentModal from '../components/CloseIncidentModal';
+import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import {
     mockGetIncidents,
