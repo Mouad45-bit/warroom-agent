@@ -32,8 +32,8 @@
 // ══════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from 'react';
-import AlertSeverityBadge from './ui/alerts/AlertSeverityBadge.jsx';
-import AlertStatusBadge from './ui/alerts/AlertStatusBadge.jsx';
+import AlertSeverityBadge from '../../ui/alerts/AlertSeverityBadge.jsx';
+import AlertStatusBadge from '../../ui/alerts/AlertStatusBadge.jsx';
 import {
     X,
     Loader2,

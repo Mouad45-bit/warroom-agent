@@ -25,7 +25,7 @@ import AlertStatusBadge from '../components/ui/alerts/AlertStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import FalsePositiveModal from '../components/FalsePositiveModal';
-import AlertDetailModal from '../components/AlertDetailModal';
+import AlertDetailModal from '../components/modals/alerts/AlertDetailModal.jsx';
 import {
     mockGetAlerts,
     mockGetAlertDetail,
