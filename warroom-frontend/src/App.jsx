@@ -1,3 +1,5 @@
+// /src/App.jsx
+
 // ══════════════════════════════════════════════════════════════
 //  APPLICATION PRINCIPALE — Routeur & Structure
 // ══════════════════════════════════════════════════════════════
@@ -29,12 +31,10 @@ import Layout from './components/Layout';
 
 // Pages
 import LoginPage from './pages/LoginPage';
-/*
 import DashboardPage from './pages/DashboardPage';
 import AlertsPage from './pages/AlertsPage';
 import IncidentsPage from './pages/IncidentsPage';
 import AgentsPage from './pages/AgentsPage';
- */
 import UsersPage from './pages/UsersPage';
 
 export default function App() {
@@ -52,31 +52,23 @@ export default function App() {
                     <Route element={<ProtectedRoute />}>
                         <Route element={<Layout />}>
 
-                            {/* Tableau de bord — tous les rôles */}
-                            {/*
+                            {/* Tableau de bord — tous les rôles (placeholder Module 4) */}
                             <Route path="/" element={<DashboardPage />} />
-                            */}
 
                             {/* File d'alertes — L1, L2, MANAGER (contrat §6) */}
-                            {/*
                             <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']} />}>
                                 <Route path="/alerts" element={<AlertsPage />} />
                             </Route>
-                            */}
 
                             {/* Incidents — L1, L2, MANAGER (placeholder Module 2) */}
-                            {/*
                             <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']} />}>
                                 <Route path="/incidents" element={<IncidentsPage />} />
                             </Route>
-                            */}
 
                             {/* Supervision agents — MANAGER, ADMIN (placeholder Module 5) */}
-                            {/*
                             <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
                                 <Route path="/agents" element={<AgentsPage />} />
                             </Route>
-                            */}
 
                             {/* Administration des comptes — MANAGER, ADMIN */}
                             <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
