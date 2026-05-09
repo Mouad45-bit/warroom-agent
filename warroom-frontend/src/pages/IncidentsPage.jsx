@@ -34,7 +34,7 @@ import StatusChangeModal from '../components/StatusChangeModal';
 import ReassignModal from '../components/ReassignModal';
 import ReturnToL1Modal from '../components/ReturnToL1Modal';
 import CloseIncidentModal from '../components/CloseIncidentModal';
-import AddNoteModal from '../components/AddNoteModal';
+import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import {
     mockGetIncidents,
     mockGetIncidentDetail,
