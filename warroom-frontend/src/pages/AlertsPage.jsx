@@ -31,7 +31,7 @@ import {
     mockGetAlertDetail,
     mockAcknowledgeAlert,
     mockFalsePositiveAlert
-} from '../api/mockAlerts';
+} from '../api/mock/mockAlerts.js';
 //
 import EscalateModal from '../components/EscalateModal';
 import {
