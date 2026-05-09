@@ -1,4 +1,4 @@
-// /src/pages/AlertsPage.jsx
+// /src/pages/AgentsPage.jsx
 
 // ══════════════════════════════════════════════════════════════
 //  PLACEHOLDER — Supervision des agents (Module 5)
