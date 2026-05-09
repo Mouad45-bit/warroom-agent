@@ -23,7 +23,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import CreateUserModal from '../components/modals/users/CreateUserModal.jsx';
 import ConfirmModal from "../components/modals/ConfirmModal.jsx";
-import { mockGetUsers, mockDisableUser } from '../api/mockAuth';
+import { mockGetUsers, mockDisableUser } from '../api/mock/mockAuth.js';
 import {
     UserPlus,
     Loader2,

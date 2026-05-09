@@ -18,7 +18,7 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/client'; // Ton vrai client Axios
-import { mockCheckSession, mockLogin, mockLogout } from '../api/mockAuth'; // Le faux backend
+import { mockCheckSession, mockLogin, mockLogout } from '../api/mock/mockAuth.js'; // Le faux backend
 
 // Création du contexte React (vide par défaut)
 const AuthContext = createContext(null);
