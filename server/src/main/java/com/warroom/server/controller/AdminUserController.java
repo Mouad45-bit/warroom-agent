@@ -52,7 +52,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{userId}/disable")
-    public ResponseEntity<?> disableUser(@PathVariable Long userId, Authentication authentication) {
+    public ResponseEntity<?> disableUser(@PathVariable("userId") Long userId, Authentication authentication) {
         try {
             Role currentUserRole = extractRole(authentication);
             String currentUsername = authentication.getName();
@@ -72,7 +72,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{userId}/enable")
-    public ResponseEntity<?> enableUser(@PathVariable Long userId, Authentication authentication) {
+    public ResponseEntity<?> enableUser(@PathVariable("userId") Long userId, Authentication authentication) {
         try {
             Role currentUserRole = extractRole(authentication);
             adminUserService.enableUser(userId, currentUserRole);

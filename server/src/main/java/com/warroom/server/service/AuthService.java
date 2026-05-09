@@ -15,6 +15,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,25 +28,38 @@ public class AuthService {
 
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
+    private final SessionRegistry sessionRegistry;
 
-    public AuthService(AuthenticationManager authenticationManager, UserRepository userRepository) {
+    public AuthService(AuthenticationManager authenticationManager, UserRepository userRepository , SessionRegistry sessionRegistry) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
+        this.sessionRegistry = sessionRegistry;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public UserResponse authenticateUser(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username(), request.password())
             );
 
+            /*SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
+
+            HttpSession session = httpRequest.getSession(true);
+            session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+
+            User user = userRepository.findByUsername(request.username()).orElseThrow();*/
             SecurityContext context = SecurityContextHolder.createEmptyContext();
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
 
             HttpSession session = httpRequest.getSession(true);
             session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+
+            // 4. LIGNE CRUCIALE : On inscrit manuellement cette nouvelle session dans le registre !
+            sessionRegistry.registerNewSession(session.getId(), authentication.getPrincipal());
 
             User user = userRepository.findByUsername(request.username()).orElseThrow();
             user.setFailedAttempts(0);

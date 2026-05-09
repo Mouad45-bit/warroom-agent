@@ -12,11 +12,7 @@
     </option>
     <option name="ignoredFiles">
       <set>
-<<<<<<< HEAD
         <option value="$PROJECT_DIR$/agent/pom.xml" />
-=======
-        <option value="$PROJECT_DIR$/server/pom.xml" />
->>>>>>> origin/collectors2
       </set>
     </option>
   </component>
