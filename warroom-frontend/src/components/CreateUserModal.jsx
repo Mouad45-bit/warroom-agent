@@ -49,7 +49,7 @@ export default function CreateUserModal({ roles, onClose, onCreated }) {
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                        className="p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                     >
                         <X className="w-5 h-5 text-gray-400" />
                     </button>
@@ -101,12 +101,12 @@ export default function CreateUserModal({ roles, onClose, onCreated }) {
                             Mot de passe <span className="text-red-400">*</span>
                         </label>
                         <input
-                            type="password"
+                            type="text"
                             required
                             minLength={8}
                             value={form.password}
                             onChange={(e) => updateField('password', e.target.value)}
-                            placeholder="Minimum 8 caractères"
+                            placeholder="ahmed123"
                             className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                         />
                     </div>
@@ -148,14 +148,14 @@ export default function CreateUserModal({ roles, onClose, onCreated }) {
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2.5 text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+                            className="px-4 py-2.5 text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
                         >
                             Annuler
                         </button>
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
                         >
                             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             Créer le compte

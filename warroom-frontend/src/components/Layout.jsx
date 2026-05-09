@@ -105,7 +105,7 @@ export default function Layout() {
                         <Shield className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-lg font-bold text-gray-900 leading-tight">WarRoom</h1>
+                        <h1 className="text-xl font-bold text-gray-900 leading-tight">Vigilix</h1>
                         <p className="text-xs text-gray-400 leading-none">SOC Platform</p>
                     </div>
                 </div>
@@ -149,7 +149,7 @@ export default function Layout() {
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 rounded-lg hover:bg-red-50 hover:text-gray-700 transition-colors cursor-pointer"
                     >
                         <LogOut className="w-4 h-4" />
                         Se déconnecter
