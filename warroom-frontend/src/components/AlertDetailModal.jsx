@@ -32,7 +32,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from 'react';
-import SeverityBadge from './SeverityBadge';
+import AlertSeverityBadge from './ui/alerts/AlertSeverityBadge.jsx';
 import AlertStatusBadge from './ui/alerts/AlertStatusBadge.jsx';
 import {
     X,
@@ -119,7 +119,7 @@ export default function AlertDetailModal
                         {alert && (
                             <div>
                                 <div className="flex items-center gap-2">
-                                    <SeverityBadge severity={alert.severity} />
+                                    <AlertSeverityBadge severity={alert.severity} />
                                     <AlertStatusBadge status={alert.status} />
                                 </div>
                                 <p className="text-xs text-gray-400 font-mono mt-1">
@@ -221,7 +221,7 @@ export default function AlertDetailModal
                                                 onClick={() => handleNavigateToRelated(ra.id)}
                                                 className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors"
                                             >
-                                                <SeverityBadge severity={ra.severity} />
+                                                <AlertSeverityBadge severity={ra.severity} />
                                                 <p className="text-xs text-gray-600 truncate flex-1">{ra.message}</p>
                                                 <span className="text-xs text-gray-400 whitespace-nowrap">
                                                     {new Date(ra.createdAt).toLocaleTimeString('fr-FR')}

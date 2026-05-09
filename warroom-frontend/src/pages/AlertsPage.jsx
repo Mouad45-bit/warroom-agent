@@ -20,7 +20,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import useSSE from '../hooks/useSSE';
-import SeverityBadge from '../components/SeverityBadge';
+import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import AlertStatusBadge from '../components/ui/alerts/AlertStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/ConfirmModal';
@@ -352,7 +352,7 @@ export default function AlertsPage() {
                             {alerts.map(a => (
                                 <tr key={a.id} onClick={() => openDetail(a.id)} className={`cursor-pointer hover:bg-gray-50/50 transition-colors ${a._isNew ? 'animate-flash' : ''}`}>
                                     <td className="px-6 py-3.5 text-gray-500 whitespace-nowrap">{new Date(a.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-                                    <td className="px-6 py-3.5 text-center"><SeverityBadge severity={a.severity} /></td>
+                                    <td className="px-6 py-3.5 text-center"><AlertSeverityBadge severity={a.severity} /></td>
                                     <td className="px-6 py-3.5 text-gray-700 font-medium">{a.agent?.hostname || '—'}</td>
                                     <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">{a.sourceType || '—'}</td>
                                     <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">{a.ruleId}</td>

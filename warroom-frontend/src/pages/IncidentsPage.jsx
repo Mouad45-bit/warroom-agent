@@ -26,7 +26,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import SeverityBadge from '../components/SeverityBadge';
+import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import IncidentStatusBadge from '../components/IncidentStatusBadge';
 import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/ConfirmModal';
@@ -613,7 +613,7 @@ export default function IncidentsPage() {
                                             {inc.incidentNumber}
                                         </td>
                                         <td className="px-6 py-3.5 text-center">
-                                            <SeverityBadge severity={inc.severity} />
+                                            <AlertSeverityBadge severity={inc.severity} />
                                         </td>
                                         <td className="px-6 py-3.5 text-gray-700 max-w-xs truncate font-medium">
                                             {inc.title}
@@ -663,7 +663,7 @@ export default function IncidentsPage() {
                                         <span className="font-mono text-sm font-bold text-brand-600">
                                             {inc.incidentNumber}
                                         </span>
-                                        <SeverityBadge severity={inc.severity} />
+                                        <AlertSeverityBadge severity={inc.severity} />
                                         <IncidentStatusBadge status={inc.status} />
                                     </div>
                                     <h2 className="text-base font-semibold text-gray-900 leading-snug">
@@ -719,7 +719,7 @@ export default function IncidentsPage() {
                                     <div className="space-y-2">
                                         {incidentDetail.alerts.map(a => (
                                             <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
-                                                <SeverityBadge severity={a.severity} />
+                                                <AlertSeverityBadge severity={a.severity} />
                                                 <p className="text-xs text-gray-600 truncate flex-1">{a.message}</p>
                                                 <span className="text-xs text-gray-400 font-mono">{a.ruleId}</span>
                                             </div>

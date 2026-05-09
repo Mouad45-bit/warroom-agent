@@ -1,4 +1,4 @@
-// /src/components/SeverityBadge.jsx
+// /src/components/AlertSeverityBadge.jsx
 
 // ══════════════════════════════════════════════════════════════
 //  BADGE DE SÉVÉRITÉ
@@ -23,7 +23,7 @@ const SEVERITY_STYLES = {
     INFO:     'bg-gray-100 text-gray-600 ring-gray-500/20',
 };
 
-export default function SeverityBadge({ severity }) {
+export default function AlertSeverityBadge({ severity }) {
     const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.INFO;
 
     return (
