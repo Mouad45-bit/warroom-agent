@@ -1,11 +1,15 @@
 package com.warroom.server.controller;
 
+import com.warroom.server.dto.CreateIncidentRequest;
+import com.warroom.server.dto.EscalateAlertRequest;
 import com.warroom.server.entity.AlertRecord;
 import com.warroom.server.entity.User;
 import com.warroom.server.model.AlertStatus;
 import com.warroom.server.model.Severity;
+import com.warroom.server.repository.IncidentRepository;
 import com.warroom.server.repository.UserRepository;
 import com.warroom.server.service.AlertService;
+import com.warroom.server.service.IncidentService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +18,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,10 +29,12 @@ public class AlertController {
 
     private final AlertService alertService;
     private final UserRepository userRepository;
+    private final IncidentService incidentService;
 
-    public AlertController(AlertService alertService, UserRepository userRepository) {
+    public AlertController(AlertService alertService, UserRepository userRepository , IncidentService incidentService) {
         this.alertService = alertService;
         this.userRepository = userRepository;
+        this.incidentService = incidentService;
     }
 
     // -----------------------------------------------------------------
@@ -119,6 +126,44 @@ public class AlertController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/alerts/{alertId}/escalate — Escalader en incident (L1)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{alertId}/escalate")
+    @PreAuthorize("hasRole('L1')")
+    public ResponseEntity<?> escalateToIncident(@PathVariable("alertId") Long alertId,
+                                                @RequestBody EscalateAlertRequest request,
+                                                Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+
+            // Construire la liste complète des alertIds
+            List<Long> allAlertIds = new ArrayList<>();
+            allAlertIds.add(alertId);
+            if (request.additionalAlertIds() != null) {
+                allAlertIds.addAll(request.additionalAlertIds());
+            }
+
+            // Créer l'incident via IncidentService
+            CreateIncidentRequest incidentRequest = new CreateIncidentRequest(
+                    request.title(),
+                    request.severity(),
+                    request.triageNote(),
+                    request.assignedToUserId(),
+                    allAlertIds
+            );
+
+            Map<String, Object> incident = incidentService.createIncident(incidentRequest, userId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(incident);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         }
     }
 

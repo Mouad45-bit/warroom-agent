@@ -1,0 +1,482 @@
+### ============================================================
+### WARROOM SOC — TESTS MODULE 2 : INCIDENTS & STATUTS
+### ============================================================
+### Prérequis :
+### 1. Module 0 & 1 tests exécutés (users + alertes en base)
+### 2. Il reste des alertes NEW en base
+### ============================================================
+
+@host = http://localhost:8080
+
+
+### ============================================================
+### PRÉREQUIS : LOGIN L1
+### ============================================================
+
+### M2-0.1 — Login L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+> {%
+    client.test("Login L1 OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 1 : CRÉATION D'INCIDENT (L1 escalade une alerte)
+### ============================================================
+
+### M2-1.1 — Trouver une alerte NEW pour escalader
+GET {{host}}/api/alerts?status=NEW&severity=CRITICAL&size=3
+
+> {%
+    client.test("M2-1.1 Alertes CRITICAL NEW trouvées", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.content.length > 0);
+        client.global.set("escAlertId1", response.body.content[0].id);
+        if (response.body.content.length > 1) {
+            client.global.set("escAlertId2", response.body.content[1].id);
+        }
+    });
+%}
+
+### M2-1.2 — Créer un incident (escalade directe)
+POST {{host}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "AUTH-BRUTE-01 — Attaque brute-force depuis 192.168.1.50",
+  "severity": "HIGH",
+  "triageNote": "5 échecs SSH consécutifs en 30 secondes. Pas de scan planifié à cette heure. Escalade immédiate.",
+  "assignedToUserId": null,
+  "alertIds": [{{escAlertId1}}]
+}
+
+> {%
+    client.test("M2-1.2 Incident créé 201", function() {
+        client.assert(response.status === 201);
+        client.assert(response.body.incidentNumber === "INC-0001");
+        client.assert(response.body.status === "OPEN");
+        client.global.set("incidentId", response.body.id);
+    });
+%}
+
+### M2-1.3 — Vérifier que l'alerte est ESCALATED
+GET {{host}}/api/alerts/{{escAlertId1}}
+
+> {%
+    client.test("M2-1.3 Alerte escaladée", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.alert.status === "ESCALATED");
+    });
+%}
+
+### M2-1.4 — Tenter de ré-escalader la même alerte → 409
+POST {{host}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Doublon",
+  "severity": "HIGH",
+  "triageNote": "Test doublon",
+  "assignedToUserId": null,
+  "alertIds": [{{escAlertId1}}]
+}
+
+> {%
+    client.test("M2-1.4 Double escalade interdite 409", function() {
+        client.assert(response.status === 409);
+    });
+%}
+
+### M2-1.5 — Créer sans triageNote → 400
+POST {{host}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Test",
+  "severity": "HIGH",
+  "triageNote": "",
+  "alertIds": [1]
+}
+
+> {%
+    client.test("M2-1.5 Note vide 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M2-1.6 — Escalader via PUT /api/alerts/{id}/escalate (raccourci)
+PUT {{host}}/api/alerts/{{escAlertId2}}/escalate
+Content-Type: application/json
+
+{
+  "title": "NET-REVSHELL-01 — Reverse shell confirmé",
+  "severity": "CRITICAL",
+  "triageNote": "Connexion nc vers port 4444 sur IP externe.",
+  "assignedToUserId": null,
+  "additionalAlertIds": []
+}
+
+> {%
+    client.test("M2-1.6 Escalade raccourci 201", function() {
+        client.assert(response.status === 201);
+        client.assert(response.body.incidentNumber === "INC-0002");
+        client.global.set("incidentId2", response.body.id);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 2 : LISTE ET DÉTAIL
+### ============================================================
+
+### M2-2.1 — L1 voit ses incidents (créations)
+GET {{host}}/api/incidents
+
+> {%
+    client.test("M2-2.1 L1 voit ses incidents", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.totalElements >= 2);
+    });
+%}
+
+### M2-2.2 — Détail de l'incident
+GET {{host}}/api/incidents/{{incidentId}}
+
+> {%
+    client.test("M2-2.2 Détail incident OK", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.incident !== undefined);
+        client.assert(response.body.alerts !== undefined);
+        client.assert(response.body.timeline !== undefined);
+        client.assert(response.body.timeline.length >= 1, "Au moins 1 entrée timeline (création)");
+    });
+%}
+
+### M2-2.3 — Déconnexion L1
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### SCÉNARIO 3 : PRISE EN CHARGE (L2)
+### ============================================================
+
+### M2-3.1 — Login L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+> {%
+    client.test("M2-3.1 Login L2 OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-3.2 — L2 voit les incidents (par défaut : les siens = aucun pour l'instant)
+GET {{host}}/api/incidents
+
+> {%
+    client.test("M2-3.2 L2 file vide initialement", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-3.3 — L2 prend en charge l'incident du pool
+PUT {{host}}/api/incidents/{{incidentId}}/take
+
+> {%
+    client.test("M2-3.3 Prise en charge OK", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.status === "INVESTIGATING");
+    });
+%}
+
+### M2-3.4 — Tenter de reprendre le même incident → 409
+PUT {{host}}/api/incidents/{{incidentId}}/take
+
+> {%
+    client.test("M2-3.4 Double prise en charge 409", function() {
+        client.assert(response.status === 409);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 4 : CYCLE DE VIE COMPLET (L2 — machine à états)
+### ============================================================
+
+### M2-4.1 — INVESTIGATING → REMEDIATING
+PUT {{host}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "REMEDIATING",
+  "note": "IP 192.168.1.50 identifiée. Procède au blocage via iptables."
+}
+
+> {%
+    client.test("M2-4.1 → REMEDIATING", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.newStatus === "REMEDIATING");
+    });
+%}
+
+### M2-4.2 — Transition interdite : REMEDIATING → CLOSED (doit être 400)
+PUT {{host}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "CLOSED",
+  "note": "Tentative de sauter des étapes"
+}
+
+> {%
+    client.test("M2-4.2 Transition interdite 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M2-4.3 — Retour arrière : REMEDIATING → INVESTIGATING
+PUT {{host}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "INVESTIGATING",
+  "note": "La contre-mesure n'a pas fonctionné. L'attaquant utilise une autre IP."
+}
+
+> {%
+    client.test("M2-4.3 Retour INVESTIGATING", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-4.4 — INVESTIGATING → REMEDIATING (2ème tentative)
+PUT {{host}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "REMEDIATING",
+  "note": "Blocage de la plage IP 192.168.1.0/24 et changement du mot de passe root."
+}
+
+> {%
+    client.test("M2-4.4 → REMEDIATING (2)", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-4.5 — REMEDIATING → RESOLVED
+PUT {{host}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "RESOLVED",
+  "note": "Contre-mesures appliquées. Aucune nouvelle tentative depuis 30 minutes."
+}
+
+> {%
+    client.test("M2-4.5 → RESOLVED", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-4.6 — Note sans changer le statut → 400 (newStatus obligatoire)
+PUT {{host}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "",
+  "note": "Juste une note"
+}
+
+> {%
+    client.test("M2-4.6 newStatus vide 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M2-4.7 — Clôturer l'incident
+PUT {{host}}/api/incidents/{{incidentId}}/close
+Content-Type: application/json
+
+{
+  "summary": "Attaque brute-force SSH stoppée. IP source bloquée. Mot de passe root modifié. Recommandation : désactiver l'auth par mot de passe SSH."
+}
+
+> {%
+    client.test("M2-4.7 Clôture OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-4.8 — Vérifier l'incident clôturé (timeline complète)
+GET {{host}}/api/incidents/{{incidentId}}
+
+> {%
+    client.test("M2-4.8 Incident CLOSED", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.incident.status === "CLOSED");
+        client.assert(response.body.timeline.length >= 6, "Au moins 6 entrées timeline");
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 5 : RENVOI AU L1 (faux positif)
+### ============================================================
+
+### M2-5.1 — L2 prend en charge l'incident 2
+PUT {{host}}/api/incidents/{{incidentId2}}/take
+
+> {%
+    client.test("M2-5.1 Prise en charge incident 2", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-5.2 — L2 renvoie au L1 (faux positif)
+PUT {{host}}/api/incidents/{{incidentId2}}/return-to-l1
+Content-Type: application/json
+
+{
+  "justification": "Après investigation, il s'agit du scanner Nessus interne (IP 192.168.1.50). Pas une vraie attaque."
+}
+
+> {%
+    client.test("M2-5.2 Renvoi au L1 OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-5.3 — Vérifier que l'incident est CLOSED_FALSE_POSITIVE
+GET {{host}}/api/incidents/{{incidentId2}}
+
+> {%
+    client.test("M2-5.3 Incident CLOSED_FALSE_POSITIVE", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.incident.status === "CLOSED_FALSE_POSITIVE");
+    });
+%}
+
+### M2-5.4 — Déconnexion L2
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### SCÉNARIO 6 : RÉASSIGNATION (MANAGER)
+### ============================================================
+
+### M2-6.1 — Login Manager
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+### M2-6.2 — Créer un 3ème incident pour tester la réassignation
+# D'abord login L1 pour créer l'incident
+POST {{host}}/api/auth/logout
+
+###
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+### M2-6.3 — Trouver une alerte NEW
+GET {{host}}/api/alerts?status=NEW&size=1
+
+> {%
+    client.test("M2-6.3 Alerte NEW pour incident 3", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.content.length > 0);
+        client.global.set("escAlertId3", response.body.content[0].id);
+    });
+%}
+
+### M2-6.4 — Créer incident 3 assigné à L2
+POST {{host}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "FIM-VITAL-01 — Modification /etc/shadow",
+  "severity": "CRITICAL",
+  "triageNote": "Hash de /etc/shadow modifié. Compromission probable.",
+  "assignedToUserId": {{l2UserId}},
+  "alertIds": [{{escAlertId3}}]
+}
+
+> {%
+    client.test("M2-6.4 Incident 3 créé", function() {
+        client.assert(response.status === 201);
+        client.global.set("incidentId3", response.body.id);
+    });
+%}
+
+### M2-6.5 — Login Manager
+POST {{host}}/api/auth/logout
+
+###
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+### M2-6.6 — Manager réassigne l'incident 3
+PUT {{host}}/api/incidents/{{incidentId3}}/reassign
+Content-Type: application/json
+
+{
+  "newAssigneeUserId": {{l2UserId}},
+  "note": "Sara a plus d'expérience sur les incidents d'intégrité de fichiers."
+}
+
+> {%
+    client.test("M2-6.6 Réassignation OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M2-6.7 — Vérifier la timeline de réassignation
+GET {{host}}/api/incidents/{{incidentId3}}
+
+> {%
+    client.test("M2-6.7 Timeline contient la réassignation", function() {
+        client.assert(response.status === 200);
+        var hasReassign = response.body.timeline.some(e => e.entryType === "REASSIGNMENT");
+        client.assert(hasReassign, "La timeline doit contenir une entrée REASSIGNMENT");
+    });
+%}
+
+### M2-6.8 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("Déconnexion finale OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### FIN DES TESTS MODULE 2
+### ============================================================
+### Résumé :
+###   ✓ Création d'incident via POST /api/incidents (L1)
+###   ✓ Escalade raccourci via PUT /api/alerts/{id}/escalate (L1)
+###   ✓ Double escalade interdite (409)
+###   ✓ Note de triage obligatoire (400)
+###   ✓ Prise en charge L2 + protection concurrence
+###   ✓ Cycle complet : OPEN → INVESTIGATING → REMEDIATING → RESOLVED → CLOSED
+###   ✓ Retour arrière : REMEDIATING → INVESTIGATING
+###   ✓ Transition interdite (400)
+###   ✓ Renvoi au L1 (faux positif → CLOSED_FALSE_POSITIVE)
+###   ✓ Réassignation par Manager
+###   ✓ Timeline vérifiée à chaque étape
+### ============================================================
