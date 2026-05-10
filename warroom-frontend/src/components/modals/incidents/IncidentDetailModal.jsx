@@ -273,11 +273,11 @@ export default function IncidentDetailModal
                                             </button>
                                         )}
 
+                                        {/* Bouton de contre-mesure ACTIVÉ (Module 3) */}
                                         {isAssignedL2 && (
-                                            <button disabled title="Disponible au Module 3"
-                                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-gray-400 text-sm font-medium rounded-xl border border-gray-100 bg-gray-50 cursor-not-allowed">
+                                            <button onClick={onAddCountermeasure}
+                                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-orange-700 text-sm font-medium rounded-xl border border-orange-200 hover:bg-orange-50 transition-colors cursor-pointer">
                                                 <ShieldPlus className="w-4 h-4" /> Ajouter une contre-mesure
-                                                <span className="text-xs opacity-60">(Module 3)</span>
                                             </button>
                                         )}
 

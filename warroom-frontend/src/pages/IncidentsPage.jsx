@@ -36,6 +36,7 @@ import ReassignModal from '../components/modals/incidents/ReassignModal.jsx';
 import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx';
 import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
+import CountermeasureModal from '../components/modals/incidents/CountermeasureModal.jsx';
 import {
     mockGetIncidents,
     mockGetIncidentDetail,
@@ -45,6 +46,7 @@ import {
     mockReturnToL1,
     mockCloseIncident,
     mockAddNote,
+    mockAddCountermeasure,
     mockGetL2Users,
     getAllowedTransitions,
 } from '../api/mock/mockIncidents.js';
@@ -53,11 +55,6 @@ import {
     Filter,
     Loader2,
     RotateCcw,
-    ArrowRight,
-    UserCheck,
-    MessageSquare,
-    ShieldPlus,
-    CheckCircle2,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
@@ -122,6 +119,7 @@ export default function IncidentsPage() {
     const [returnModal, setReturnModal] = useState({ isOpen: false });
     const [closeModal, setCloseModal] = useState({ isOpen: false });
     const [noteModal, setNoteModal] = useState({ isOpen: false });
+    const [cmModal, setCmModal] = useState({ isOpen: false });
     const [modalSubmitting, setModalSubmitting] = useState(false);
     const [modalError, setModalError] = useState(null);
 
@@ -381,6 +379,36 @@ export default function IncidentsPage() {
     };
 
     // ══════════════════════════════════════════════════════════
+    //  ACTION : AJOUTER UNE CONTRE-MESURE (Module 3)
+    // ══════════════════════════════════════════════════════════
+    const openCmModal = () => {
+        setModalError(null);
+        setCmModal({ isOpen: true });
+    };
+
+    const handleAddCountermeasure = async ({ type, description, technicalCommand }) => {
+        setModalSubmitting(true);
+        setModalError(null);
+        try {
+            let result;
+            if (USE_MOCK_API) {
+                result = await mockAddCountermeasure(selectedIncidentId, type, description, technicalCommand, user?.fullName, user?.role);
+            } else {
+                const res = await api.post(`/api/incidents/${selectedIncidentId}/countermeasures`, {
+                    type, description, technicalCommand,
+                });
+                result = res.data;
+            }
+
+            setCmModal({ isOpen: false });
+            await refreshDetail();
+        } catch (err) {
+            setModalError(err.response?.data?.message || 'Erreur lors de l\'ajout de la contre-mesure.');
+        }
+        setModalSubmitting(false);
+    };
+
+    // ══════════════════════════════════════════════════════════
     //  UTILITAIRES FILTRES
     // ══════════════════════════════════════════════════════════
     const toggleFilter = (field, value) => {
@@ -603,7 +631,7 @@ export default function IncidentsPage() {
                 onTake={requestTake}
                 onChangeStatus={openStatusModal}
                 onCloseIncident={openCloseModal}
-                onAddCountermeasure={() => {}}
+                onAddCountermeasure={openCmModal}
                 onReturnToL1={openReturnModal}
                 onReassign={openReassignModal}
                 onAddNote={openNoteModal}
@@ -679,6 +707,16 @@ export default function IncidentsPage() {
                 isOpen={noteModal.isOpen}
                 onClose={() => setNoteModal({ isOpen: false })}
                 onConfirm={handleAddNote}
+                submitting={modalSubmitting}
+                error={modalError}
+            />
+
+            {/* Contre-mesure — Module 3 */}
+            <CountermeasureModal
+                isOpen={cmModal.isOpen}
+                isRemediating={inc?.status === 'REMEDIATING'}
+                onClose={() => setCmModal({ isOpen: false })}
+                onConfirm={handleAddCountermeasure}
                 submitting={modalSubmitting}
                 error={modalError}
             />
