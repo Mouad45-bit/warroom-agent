@@ -424,7 +424,7 @@ export default function IncidentsPage() {
             {/* ════════════════════════════════════════════════
                 PARTIE GAUCHE : Liste des incidents
                 ════════════════════════════════════════════════ */}
-            <div className={`flex-1 p-8 overflow-y-auto transition-all ${selectedIncidentId ? 'pr-4' : ''}`}>
+            <div className="flex-1 p-8 overflow-y-auto">
 
                 {/* ── Header ─────────────────────────────────── */}
                 <div className="flex items-center justify-between mb-6">

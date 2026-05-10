@@ -97,6 +97,13 @@ export default function IncidentDetailModal
 
     const inc = incidentDetail?.incident;
 
+    const hasAnyAction = isIncidentActive && (
+        (isL2 && isPoolIncident) ||
+        isAssignedL2 ||
+        canAddNote ||
+        isManager
+    );
+
     return (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
             <div className="w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden">
@@ -234,7 +241,7 @@ export default function IncidentDetailModal
                                 )}
 
                                 {/* Boutons d'actions */}
-                                {isIncidentActive && (
+                                {hasAnyAction && (
                                     <div className="border-t border-gray-100 pt-6 space-y-3">
                                         <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Actions</p>
 
