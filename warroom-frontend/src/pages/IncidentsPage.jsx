@@ -435,25 +435,27 @@ export default function IncidentsPage() {
                         </p>
                     </div>
                     <div className="flex gap-2">
-                        {/* Toggle Mes incidents / Tous (L2 uniquement) */}
                         {isL2 && (
-                            <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                            <div className="relative flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5">
+                                <div
+                                    className="absolute top-0.5 bottom-0.5 rounded-lg bg-brand-100 shadow-sm border border-brand-200 transition-all duration-300 ease-in-out"
+                                    style={{
+                                        width: viewMode === 'mine' ? 'calc(65% - 2px)' : 'calc(35% - 2px)',
+                                        left: viewMode === 'mine' ? '2px' : 'calc(65%)',
+                                    }}
+                                />
                                 <button
                                     onClick={() => { setViewMode('mine'); setPage(0); }}
-                                    className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
-                                        viewMode === 'mine'
-                                            ? 'bg-brand-50 text-brand-600'
-                                            : 'text-gray-500 hover:bg-gray-50'
+                                    className={`relative z-10 px-3 py-[7px] text-xs font-medium rounded-lg transition-colors duration-300 cursor-pointer flex-1 text-center whitespace-nowrap ${
+                                        viewMode === 'mine' ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'
                                     }`}
                                 >
                                     Mes incidents
                                 </button>
                                 <button
                                     onClick={() => { setViewMode('all'); setPage(0); }}
-                                    className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
-                                        viewMode === 'all'
-                                            ? 'bg-brand-50 text-brand-600'
-                                            : 'text-gray-500 hover:bg-gray-50'
+                                    className={`relative z-10 px-3 py-[7px] text-xs font-medium rounded-lg transition-colors duration-300 cursor-pointer flex-1 text-center whitespace-nowrap ${
+                                        viewMode === 'all' ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'
                                     }`}
                                 >
                                     Tous
