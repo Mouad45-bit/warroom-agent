@@ -33,7 +33,7 @@ import {
     mockFalsePositiveAlert
 } from '../api/mock/mockAlerts.js';
 //
-import EscalateModal from '../components/EscalateModal';
+import EscalateModal from '../components/modals/alerts/EscalateModal.jsx';
 import {
     mockCreateIncident,
     mockGetL2Users,
