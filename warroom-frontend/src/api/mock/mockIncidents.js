@@ -784,3 +784,42 @@ export async function mockCreateIncident({ title, severity, triageNote, assigned
 
     return incident;
 }
+
+export async function mockAddCountermeasure(incidentId, type, description, technicalCommand, authorFullName, authorRole) {
+    await delay();
+
+    const incident = incidents.find(i => i.id === Number(incidentId));
+    if (!incident) throw new Error('Incident introuvable');
+
+    // Vérifier statut clos
+    if (['CLOSED', 'CLOSED_FALSE_POSITIVE'].includes(incident.status)) {
+        throw { response: { status: 400, data: { message: 'Impossible d\'ajouter une contre-mesure à un incident clôturé.' } } };
+    }
+
+    // Créer l'entrée timeline
+    const entry = {
+        id: nextTimelineId++,
+        entryType: 'COUNTERMEASURE',
+        authorFullName,
+        authorRole,
+        content: description,
+        oldStatus: null,
+        newStatus: null,
+        countermeasureType: type,
+        technicalCommand: technicalCommand || null,
+        createdAt: new Date().toISOString(),
+    };
+    if (!timelines[incident.id]) timelines[incident.id] = [];
+    timelines[incident.id].push(entry);
+
+    // Warning si pas en REMEDIATING
+    const warning = incident.status !== 'REMEDIATING'
+        ? "L'incident n'est pas en phase de remédiation"
+        : null;
+
+    return {
+        id: entry.id,
+        message: 'Contre-mesure ajoutée',
+        warning,
+    };
+}
