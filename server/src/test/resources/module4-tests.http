@@ -1,0 +1,149 @@
+### ============================================================
+### WARROOM SOC — TESTS MODULE 4 : DASHBOARD & STATISTIQUES
+### ============================================================
+### Prérequis :
+### 1. Modules 0, 1, 2, 3 exécutés (pour avoir des données à agréger)
+### 2. Base de données contenant des utilisateurs, alertes et incidents
+### ============================================================
+
+@host = http://localhost:8080
+
+### ============================================================
+### SCÉNARIO 1 : L'ANALYSTE L1 ET LES STATS GLOBALES
+### ============================================================
+
+### M4-1.1 — Login L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+> {%
+    client.test("M4-1.1 Login L1 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M4-1.2 — Récupération des stats globales (L1 autorisé)
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("M4-1.2 Stats globales OK", function() {
+        client.assert(response.status === 200, "Status 200");
+
+        var stats = response.body;
+        // Vérification de la présence des KPIs cruciaux
+        client.assert(stats.alertsByStatus !== undefined, "alertsByStatus présent");
+        client.assert(stats.alertsBySeverity !== undefined, "alertsBySeverity présent");
+        client.assert(stats.incidentsByStatus !== undefined, "incidentsByStatus présent");
+
+        // Vérification de l'état du parc (Intégration logique avec Module 5)
+        client.assert(stats.agentsConnected !== undefined, "agentsConnected présent");
+        client.assert(stats.agentsWarning !== undefined, "agentsWarning présent");
+        client.assert(stats.agentsDisconnected !== undefined, "agentsDisconnected présent");
+
+        // Vérification des indicateurs de performance
+        client.assert(stats.hasOwnProperty("mttd24h"), "mttd24h présent (peut être null)");
+        client.assert(stats.hasOwnProperty("mttr24h"), "mttr24h présent (peut être null)");
+    });
+%}
+
+### M4-1.3 — L1 tente d'accéder aux stats Manager → 403
+GET {{host}}/api/dashboard/stats/manager
+
+> {%
+    client.test("M4-1.3 L1 interdit sur stats Manager", function() {
+        client.assert(response.status === 403, "Status 403 Forbidden");
+    });
+%}
+
+### M4-1.4 — L1 consulte ses notifications (Générées par le Module 3)
+GET {{host}}/api/dashboard/notifications?unreadOnly=true
+
+> {%
+    client.test("M4-1.4 Notifications L1 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(Array.isArray(response.body), "Doit renvoyer un tableau");
+
+        // S'il y a des notifications, on en sauvegarde une pour tester le "marquage comme lu"
+        if (response.body.length > 0) {
+            client.global.set("notifIdToRead", response.body[0].id);
+        }
+    });
+%}
+
+### M4-1.5 — L1 marque une notification comme lue (Conditionnel)
+PUT {{host}}/api/dashboard/notifications/{{notifIdToRead}}/read
+
+> {%
+    client.test("M4-1.5 Marquer notif comme lue", function() {
+        // On teste seulement si une notification a été trouvée à l'étape précédente
+        if (client.global.get("notifIdToRead") !== undefined && client.global.get("notifIdToRead") !== "") {
+            client.assert(response.status === 200, "Status 200 OK");
+        }
+    });
+%}
+
+### M4-1.6 — Logout L1
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### SCÉNARIO 2 : LE MANAGER ET LES STATS DE PERFORMANCE
+### ============================================================
+
+### M4-2.1 — Login Manager
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+> {%
+    client.test("M4-2.1 Login Manager OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M4-2.2 — Manager récupère les stats globales (Autorisé)
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("M4-2.2 Manager voit les stats globales", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M4-2.3 — Manager récupère les stats d'équipe (KPIs L1 & L2)
+GET {{host}}/api/dashboard/stats/manager
+
+> {%
+    client.test("M4-2.3 Stats Manager OK", function() {
+        client.assert(response.status === 200, "Status 200");
+
+        var managerStats = response.body;
+
+        // Vérification des KPIs d'équipe
+        client.assert(managerStats.incidentsByAssignee !== undefined, "Stats L2 présentes");
+        client.assert(managerStats.triageRateByL1 !== undefined, "Stats L1 présentes");
+
+        // Vérification de la structure interne des stats L1
+        if (managerStats.triageRateByL1.length > 0) {
+            var l1Stat = managerStats.triageRateByL1[0];
+            client.assert(l1Stat.fullName !== undefined, "Nom du L1 présent");
+            client.assert(l1Stat.hasOwnProperty("falsePositiveRate"), "Taux de faux positifs présent");
+        }
+    });
+%}
+
+### M4-2.4 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("Déconnexion finale OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### ============================================================
+### FIN DES TESTS MODULE 4
+### ============================================================

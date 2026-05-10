@@ -26,6 +26,7 @@ public class IncidentService {
     private final IncidentTimelineRepository timelineRepository;
     private final AlertRecordRepository alertRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
     private static final Set<String> VALID_COUNTERMEASURE_TYPES = Set.of(
             "BLOCK_IP", "DISABLE_ACCOUNT", "ISOLATE_MACHINE", "APPLY_PATCH",
             "RESTART_SERVICE", "FIREWALL_RULE", "OTHER"
@@ -35,12 +36,14 @@ public class IncidentService {
                            IncidentAlertRepository incidentAlertRepository,
                            IncidentTimelineRepository timelineRepository,
                            AlertRecordRepository alertRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           NotificationService notificationService) {
         this.incidentRepository = incidentRepository;
         this.incidentAlertRepository = incidentAlertRepository;
         this.timelineRepository = timelineRepository;
         this.alertRepository = alertRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     // =================================================================
@@ -262,6 +265,14 @@ public class IncidentService {
                 "Réassigné à " + newAssignee.getFullName() + " — " + note,
                 null, null);
 
+        // NOUVEAU : On prévient le nouveau L2 qu'il a du travail !
+        notificationService.notify(
+                newAssigneeUserId,
+                NotificationType.INCIDENT_ASSIGNED,
+                "L'incident " + incident.getIncidentNumber() + " vous a été assigné.",
+                incidentId
+        );
+
         log.info("Incident {} réassigné à {} par {}", incident.getIncidentNumber(),
                 newAssignee.getUsername(), manager.getUsername());
     }
@@ -301,6 +312,14 @@ public class IncidentService {
         addTimelineEntry(incidentId, TimelineEntryType.CLOSURE, l2,
                 "Renvoyé au L1 (faux positif) — " + justification,
                 incident.getStatus(), IncidentStatus.CLOSED_FALSE_POSITIVE);
+
+        // NOUVEAU : On prévient le L1 que son incident a été rejeté
+        notificationService.notify(
+                incident.getCreatedByUserId(),
+                NotificationType.INCIDENT_RETURNED,
+                "Votre incident " + incident.getIncidentNumber() + " a été classé comme faux positif par le niveau 2.",
+                incidentId
+        );
 
         log.info("Incident {} renvoyé au L1 comme faux positif par {}", incident.getIncidentNumber(), l2.getUsername());
     }
