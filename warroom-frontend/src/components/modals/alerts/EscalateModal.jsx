@@ -25,6 +25,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ArrowUpRight } from 'lucide-react';
+import AlertSeverityBadge from "../../ui/alerts/AlertSeverityBadge.jsx";
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 
@@ -199,7 +200,7 @@ export default function EscalateModal({
                                             onChange={() => toggleAdditionalAlert(ra.id)}
                                             className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600"
                                         />
-                                        <SeverityBadge severity={ra.severity} />
+                                        <AlertSeverityBadge severity={ra.severity} />
                                         <span className="text-xs text-gray-600 truncate flex-1">{ra.message}</span>
                                     </label>
                                 ))}
