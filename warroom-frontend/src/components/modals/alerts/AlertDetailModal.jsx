@@ -53,6 +53,7 @@ export default function AlertDetailModal
          onNavigate,
          onAcknowledge,
          onFalsePositive,
+         onEscalate,
      }) {
     // ══════════════════════════════════════════════════════════
     //  HISTORIQUE DE NAVIGATION
@@ -261,7 +262,7 @@ export default function AlertDetailModal
                                         Faux positif
                                     </button>
 
-                                    <button onClick={openEscalateModal}
+                                    <button onClick={onEscalate}
                                             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-purple-700 text-sm font-medium rounded-xl border border-purple-200 hover:bg-purple-50 transition-colors cursor-pointer">
                                         <ArrowUpRight className="w-4 h-4" />
                                         Escalader en incident

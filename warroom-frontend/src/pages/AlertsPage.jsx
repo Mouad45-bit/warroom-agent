@@ -379,6 +379,7 @@ export default function AlertsPage() {
                 onNavigate={navigateDetail}
                 onAcknowledge={requestAcknowledge}
                 onFalsePositive={openFPModal}
+                onEscalate={openEscalateModal}
             />
 
             <ConfirmModal
