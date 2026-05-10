@@ -37,6 +37,7 @@ import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx'
 import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import CountermeasureModal from '../components/modals/incidents/CountermeasureModal.jsx';
+import { appConfig } from '../config/appConfig.js';
 import {
     mockGetIncidents,
     mockGetIncidentDetail,
@@ -56,13 +57,6 @@ import {
     Loader2,
     RotateCcw,
 } from 'lucide-react';
-
-// ══════════════════════════════════════════════════════════════
-// ⚙️ CONFIGURATION DE L'ENVIRONNEMENT
-// true = Utilise les fausses données (pour coder l'UI)
-// false = Utilise le vrai backend Spring Boot
-// ══════════════════════════════════════════════════════════════
-const USE_MOCK_API = true;
 
 // ── Valeurs possibles pour les filtres ────────────────────
 const INCIDENT_STATUSES = ['OPEN', 'INVESTIGATING', 'REMEDIATING', 'RESOLVED', 'CLOSED', 'CLOSED_FALSE_POSITIVE'];
@@ -129,7 +123,7 @@ export default function IncidentsPage() {
     useEffect(() => {
         const loadL2Users = async () => {
             try {
-                if (USE_MOCK_API) {
+                if (appConfig.useMockApi) {
                     const users = await mockGetL2Users();
                     setL2Users(users);
                 } else {
@@ -152,7 +146,7 @@ export default function IncidentsPage() {
     const fetchIncidents = useCallback(async () => {
         setLoadingList(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetIncidents({
                     page,
                     size: PAGE_SIZE,
@@ -195,7 +189,7 @@ export default function IncidentsPage() {
         setSelectedIncidentId(incidentId);
         setLoadingDetail(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetIncidentDetail(incidentId);
                 setIncidentDetail(data);
             } else {
@@ -236,7 +230,7 @@ export default function IncidentsPage() {
     const executeTake = async () => {
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockTakeIncident(selectedIncidentId, user?.userId, user?.fullName);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/take`);
@@ -261,7 +255,7 @@ export default function IncidentsPage() {
         setModalSubmitting(true);
         setModalError(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockChangeStatus(selectedIncidentId, newStatus, note);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/status`, { newStatus, note });
@@ -287,7 +281,7 @@ export default function IncidentsPage() {
         setModalSubmitting(true);
         setModalError(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockReassignIncident(selectedIncidentId, newAssigneeUserId, note);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/reassign`, { newAssigneeUserId, note });
@@ -313,7 +307,7 @@ export default function IncidentsPage() {
         setModalSubmitting(true);
         setModalError(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockReturnToL1(selectedIncidentId, justification);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/return-to-l1`, { justification });
@@ -339,7 +333,7 @@ export default function IncidentsPage() {
         setModalSubmitting(true);
         setModalError(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockCloseIncident(selectedIncidentId, summary);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/close`, { summary });
@@ -365,7 +359,7 @@ export default function IncidentsPage() {
         setModalSubmitting(true);
         setModalError(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockAddNote(selectedIncidentId, content, user?.fullName, user?.role);
             } else {
                 await api.post(`/api/incidents/${selectedIncidentId}/notes`, { content });
@@ -391,7 +385,7 @@ export default function IncidentsPage() {
         setModalError(null);
         try {
             let result;
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 result = await mockAddCountermeasure(selectedIncidentId, type, description, technicalCommand, user?.fullName, user?.role);
             } else {
                 const res = await api.post(`/api/incidents/${selectedIncidentId}/countermeasures`, {

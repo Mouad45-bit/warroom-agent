@@ -9,8 +9,6 @@
 //    - Fonctions qui imitent les réponses de l'API (contrat §2)
 //    - Délai artificiel de 300ms pour simuler le réseau
 //
-//  Quand le backend sera prêt, il suffira de passer
-//  USE_MOCK_API = false dans IncidentsPage.jsx.
 // ══════════════════════════════════════════════════════════════
 
 const delay = (ms = 300) => new Promise(r => setTimeout(r, ms));

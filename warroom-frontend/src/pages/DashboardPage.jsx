@@ -27,6 +27,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { appConfig } from '../config/appConfig.js';
 import {
     mockGetStats,
     mockGetManagerStats,
@@ -43,16 +44,12 @@ import {
     ChevronDown,
     ChevronRight,
     CheckCheck,
-    AlertTriangle,
     RotateCcw,
     Inbox,
     Activity,
-    Users,
     TrendingUp,
     BarChart3,
 } from 'lucide-react';
-
-const USE_MOCK_API = true;
 
 // ── Utilitaire : secondes → texte lisible ────────────────────
 function formatDuration(seconds) {
@@ -181,19 +178,19 @@ export default function DashboardPage() {
         const loadAll = async () => {
             setLoading(true);
             try {
-                const s = USE_MOCK_API
+                const s = appConfig.useMockApi
                     ? await mockGetStats()
                     : (await api.get('/api/dashboard/stats')).data;
                 setStats(s);
 
                 if (role === 'MANAGER') {
-                    const ms = USE_MOCK_API
+                    const ms = appConfig.useMockApi
                         ? await mockGetManagerStats()
                         : (await api.get('/api/dashboard/stats/manager')).data;
                     setManagerStats(ms);
                 }
 
-                const notifs = USE_MOCK_API
+                const notifs = appConfig.useMockApi
                     ? await mockGetNotifications(true)
                     : (await api.get('/api/dashboard/notifications?unreadOnly=true')).data;
                 setNotifications(notifs);
@@ -208,7 +205,7 @@ export default function DashboardPage() {
     // ── Marquer comme lu ─────────────────────────────────────
     const markRead = async (notifId) => {
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockMarkNotificationRead(notifId);
             } else {
                 await api.put(`/api/dashboard/notifications/${notifId}/read`);

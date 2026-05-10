@@ -8,15 +8,14 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AgentConfigModal from '../components/modals/agents/AgentConfigModal.jsx';
-import AgentDetailModal from '../components/modals/agents/AgentDetailModal.jsx'; // ← NOUVEL IMPORT
+import AgentDetailModal from '../components/modals/agents/AgentDetailModal.jsx';
+import { appConfig } from '../config/appConfig.js';
 import {
     mockGetAgents,
     mockGetAgentDetail,
     mockUpdateAgentConfig,
 } from '../api/mock/mockAgents.js';
 import { Loader2, MonitorCheck } from 'lucide-react';
-
-const USE_MOCK_API = true;
 
 // ── Constantes pour la liste ─────────────────────────────────
 const HEALTH_COLORS = {
@@ -56,7 +55,7 @@ export default function AgentsPage() {
     const fetchAgents = useCallback(async () => {
         setLoadingList(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetAgents();
                 setAgents(data);
             } else {
@@ -77,7 +76,7 @@ export default function AgentsPage() {
         setLoadingDetail(true);
         setAgentDetail(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetAgentDetail(agentId);
                 setAgentDetail(data);
             } else {
@@ -101,7 +100,7 @@ export default function AgentsPage() {
         setConfigSubmitting(true);
         setConfigError(null);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockUpdateAgentConfig(agentDetail.agent.agentId, newConfig);
             } else {
                 await api.put(`/api/admin/agents/${agentDetail.agent.agentId}/config`, newConfig);
