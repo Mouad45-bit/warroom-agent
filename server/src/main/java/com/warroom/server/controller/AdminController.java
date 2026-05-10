@@ -5,12 +5,14 @@ import com.warroom.server.entity.Agent;
 import com.warroom.server.repository.AgentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/admin/agents")
-@CrossOrigin(origins = "*") // Autorise le Dashboard à faire des requêtes
+@CrossOrigin(origins = "*")
+@PreAuthorize("hasRole('ADMIN')")// Autorise le Dashboard à faire des requêtes
 public class AdminController {
 
     private final AgentRepository agentRepository;

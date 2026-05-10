@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -37,10 +38,10 @@ public class Agent {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "agent_enabled_collectors", joinColumns = @JoinColumn(name = "agent_id"))
     @Column(name = "collector_name")
-    private List<String> enabledCollectors = List.of(
+    private List<String> enabledCollectors = new ArrayList<>(List.of(
             "LogCollector",
             "NetworkCollector",
             "ProcessCollector",
-            "FileIntegrityCollector"
-    );
+            "FileIntegrityCollector"));
+
 }

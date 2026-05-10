@@ -1,0 +1,319 @@
+========================================================================================================================
+EXPORT JAVA INTERACTIF (FICHIERS .java UNIQUEMENT)
+PROJET : C:\Users\marwa\warroom-agent\server
+========================================================================================================================
+
+########################################################################################################################
+GROUPE : WARROOM/CONTROLLER
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\SupervisionController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.AgentDetailResponse;
+import com.warroom.server.dto.AgentSummaryDto;
+import com.warroom.server.service.SupervisionService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/supervision/agents")
+@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+public class SupervisionController {
+
+    private final SupervisionService supervisionService;
+
+    public SupervisionController(SupervisionService supervisionService) {
+        this.supervisionService = supervisionService;
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/supervision/agents — Liste le parc informatique (statut dynamique)
+    // -----------------------------------------------------------------
+    @GetMapping
+    public ResponseEntity<List<AgentSummaryDto>> getAllAgents() {
+        return ResponseEntity.ok(supervisionService.getAllAgentsSummary());
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/supervision/agents/{agentId} — Détail complet exigé par le contrat
+    // -----------------------------------------------------------------
+    @GetMapping("/{agentId}")
+    public ResponseEntity<?> getAgentDetail(@PathVariable("agentId") String agentId) {
+        try {
+            AgentDetailResponse detail = supervisionService.getAgentDetail(agentId);
+            return ResponseEntity.ok(detail);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/SERVICE
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\SupervisionService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warroom.server.dto.*;
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.AgentHealthRecord;
+import com.warroom.server.model.HealthStatus;
+import com.warroom.server.repository.AgentHealthRecordRepository;
+import com.warroom.server.repository.AgentRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class SupervisionService {
+
+    private final AgentRepository agentRepository;
+    private final AgentHealthRecordRepository healthRepository;
+    private final ObjectMapper objectMapper;
+
+    public SupervisionService(AgentRepository agentRepository, AgentHealthRecordRepository healthRepository) {
+        this.agentRepository = agentRepository;
+        this.healthRepository = healthRepository;
+        this.objectMapper = new ObjectMapper();
+    }
+
+    // --- 1. LISTE DES AGENTS (CONTRAT VALIDÉ) ---
+    public List<AgentSummaryDto> getAllAgentsSummary() {
+        return agentRepository.findAll().stream().map(agent -> {
+            HealthStatus status = calculateHealthStatus(agent.getLastSeenAt());
+
+            int activeCollectors = 0;
+            int totalCollectors = agent.getEnabledCollectors() != null ? agent.getEnabledCollectors().size() : 0;
+
+            AgentHealthRecord latestRecord = healthRepository.findFirstByAgent_AgentIdOrderByTimestampDesc(agent.getAgentId()).orElse(null);
+
+            if (latestRecord != null && latestRecord.getSnapshotData() != null && !latestRecord.getSnapshotData().equals("[]")) {
+                try {
+                    List<ComponentHealthDto> comps = objectMapper.readValue(latestRecord.getSnapshotData(), new TypeReference<>() {});
+                    activeCollectors = (int) comps.stream().filter(ComponentHealthDto::running).count();
+                    totalCollectors = Math.max(totalCollectors, comps.size());
+                } catch (Exception e) {
+                    log.error("Erreur de parsing des collecteurs pour l'agent {}", agent.getAgentId());
+                }
+            }
+
+            return new AgentSummaryDto(
+                    agent.getAgentId(), agent.getHostname(), agent.getOsName(), agent.getOsVersion(),
+                    agent.getLastSeenAt(), status, activeCollectors, totalCollectors
+            );
+        }).collect(Collectors.toList());
+    }
+
+    // --- 2. DÉTAIL D'UN AGENT (CONTRAT VALIDÉ) ---
+    public AgentDetailResponse getAgentDetail(String agentId) {
+        Agent agent = agentRepository.findById(agentId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent introuvable"));
+
+        List<AgentHealthRecord> recentRecords = healthRepository.findTop20ByAgent_AgentIdOrderByTimestampDesc(agentId);
+        AgentHealthRecord latestRecord = recentRecords.isEmpty() ? null : recentRecords.get(0);
+
+        List<HeartbeatSummaryDto> heartbeatSummaries = recentRecords.stream()
+                .map(r -> new HeartbeatSummaryDto(
+                        r.getTimestamp(),
+                        r.isRunning() ? HealthStatus.GREEN : HealthStatus.RED, // Un heartbeat reçu mais avec isRunning=false est RED
+                        r.getQueuedEvents()
+                )).collect(Collectors.toList());
+
+        List<ComponentHealthDto> components = new ArrayList<>();
+        if (latestRecord != null && latestRecord.getSnapshotData() != null && !latestRecord.getSnapshotData().equals("[]")) {
+            try {
+                components = objectMapper.readValue(latestRecord.getSnapshotData(), new TypeReference<>() {});
+            } catch (Exception e) {
+                log.error("Erreur de parsing des composants", e);
+            }
+        }
+
+        // Simulé car non persistant dans la BDD actuelle, prêt pour une future évolution
+        List<String> quarantined = new ArrayList<>();
+
+        return new AgentDetailResponse(agent, latestRecord, heartbeatSummaries, components, quarantined);
+    }
+
+    // --- RÈGLE MÉTIER STRICTE DU CONTRAT ---
+    private HealthStatus calculateHealthStatus(Instant lastSeenAt) {
+        if (lastSeenAt == null) return HealthStatus.RED;
+
+        long secondsSinceLastSeen = Duration.between(lastSeenAt, Instant.now()).getSeconds();
+
+        if (secondsSinceLastSeen < 90) return HealthStatus.GREEN;
+        if (secondsSinceLastSeen <= 300) return HealthStatus.ORANGE;
+
+        return HealthStatus.RED;
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/REPOSITORY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AgentHealthRecordRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.AgentHealthRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface AgentHealthRecordRepository extends JpaRepository<AgentHealthRecord, Long> {
+
+    // Pour le détail : Les 20 derniers heartbeats
+    List<AgentHealthRecord> findTop20ByAgent_AgentIdOrderByTimestampDesc(String agentId);
+
+    // Pour le résumé (liste) : Le tout dernier heartbeat pour extraire les collecteurs
+    Optional<AgentHealthRecord> findFirstByAgent_AgentIdOrderByTimestampDesc(String agentId);
+}
+
+########################################################################################################################
+GROUPE : WARROOM/ENTITY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\Agent.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "agents")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+public class Agent {
+
+    @Id // La clé primaire (ex: agt-a1b2c3d4)
+    private String agentId;
+
+    private String apiKey;
+    private String hostname;
+    private String osName;
+    private String osVersion;
+    private String agentVersion;
+
+    private Instant enrolledAt;
+    private Instant lastSeenAt; // Mis à jour à chaque Heartbeat
+
+    private int heartbeatIntervalSeconds = 30; // Valeur par défaut
+    private int batchSize = 100;               // Valeur par défaut
+    private int retryIntervalSeconds = 10;     // Valeur par défaut
+
+    // @ElementCollection crée automatiquement une table de liaison "agent_enabled_collectors"
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "agent_enabled_collectors", joinColumns = @JoinColumn(name = "agent_id"))
+    @Column(name = "collector_name")
+    private List<String> enabledCollectors = new ArrayList<>(List.of(
+            "LogCollector",
+            "NetworkCollector",
+            "ProcessCollector",
+            "FileIntegrityCollector"));
+
+}
+
+########################################################################################################################
+GROUPE : WARROOM/DTO
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentDetailResponse.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.AgentHealthRecord;
+import java.util.List;
+
+public record AgentDetailResponse(
+        Agent agent,
+        AgentHealthRecord latestRecord,
+        List<HeartbeatSummaryDto> recentHeartbeats,
+        List<ComponentHealthDto> components,
+        List<String> quarantinedComponents
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentSummaryDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.warroom.server.model.HealthStatus;
+import java.time.Instant;
+
+public record AgentSummaryDto(
+        String agentId,
+        String hostname,
+        String osName,
+        String osVersion,
+        Instant lastSeenAt,
+        HealthStatus healthStatus,     // <-- Remplaçant de l'ancien statut
+        int activeCollectors,          // <-- Nouveauté du contrat
+        int totalCollectors            // <-- Nouveauté du contrat
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\HeartbeatSummaryDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.warroom.server.model.HealthStatus;
+import java.time.Instant;
+
+public record HeartbeatSummaryDto(
+        Instant timestamp,
+        HealthStatus healthStatus,
+        long queuedEvents
+) {}
+
+########################################################################################################################
+GROUPE : WARROOM/MODEL
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\HealthStatus.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum HealthStatus {
+    GREEN,   // < 90s
+    ORANGE,  // 90s à 5min
+    RED      // > 5min ou jamais vu
+}
+
