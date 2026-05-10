@@ -14,6 +14,7 @@
 //          /incidents         ← Incidents (L1, L2, MANAGER) — placeholder
 //          /agents            ← Supervision (MANAGER, ADMIN) — placeholder
 //          /admin/users       ← Gestion comptes (MANAGER, ADMIN)
+//          /admin/audit-log   ← Journal d'activité (MANAGER, ADMIN)
 //        </Layout>
 //
 //  Les routes protégées utilisent <ProtectedRoute> qui vérifie
@@ -36,6 +37,7 @@ import AlertsPage from './pages/AlertsPage';
 import IncidentsPage from './pages/IncidentsPage';
 import AgentsPage from './pages/AgentsPage';
 import UsersPage from './pages/UsersPage';
+import AuditLogPage from "./pages/AuditLogPage.jsx";
 
 export default function App() {
     return (
@@ -73,6 +75,11 @@ export default function App() {
                             {/* Administration des comptes — MANAGER, ADMIN */}
                             <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
                                 <Route path="/admin/users" element={<UsersPage />} />
+                            </Route>
+
+                            {/* Journal d'activité — MANAGER, ADMIN (Module 6) */}
+                            <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
+                                <Route path="/admin/audit-log" element={<AuditLogPage />} />
                             </Route>
 
                         </Route>

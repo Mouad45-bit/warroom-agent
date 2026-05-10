@@ -1,25 +1,15 @@
-// /src/components/Layout.jsx
+// /src/components/layout/Layout.jsx
 
 // ══════════════════════════════════════════════════════════════
 //  LAYOUT PRINCIPAL — Sidebar + Zone de contenu
 // ══════════════════════════════════════════════════════════════
 //
-//  Architecture visuelle (Design System) :
-//    ┌──────────────────┬─────────────────────────────────┐
-//    │                  │  Header (titre + actions)        │
-//    │     SIDEBAR      ├─────────────────────────────────┤
-//    │  (fixe, blanc)   │                                 │
-//    │                  │  Contenu principal               │
-//    │  - Logo          │  (scrollable, fond gris clair)  │
-//    │  - Navigation    │                                 │
-//    │  - Profil        │                                 │
-//    └──────────────────┴─────────────────────────────────┘
-//
 //  La navigation s'adapte au rôle (contrat §6) :
 //    L1 → Tableau de bord, File d'alertes
 //    L2 → Tableau de bord, Incidents
-//    MANAGER → Tout sauf Supervision agents
-//    ADMIN → Tableau de bord, Supervision agents, Administration
+//    MANAGER → Tout
+//    ADMIN → Tableau de bord, Supervision agents, Administration,
+//            Journal d'activité
 // ══════════════════════════════════════════════════════════════
 
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
@@ -32,6 +22,7 @@ import {
     Users,
     LogOut,
     Shield,
+    ScrollText,
 } from 'lucide-react';
 
 export default function Layout() {
@@ -47,14 +38,6 @@ export default function Layout() {
     // ══════════════════════════════════════════════════════════
     //  DÉFINITION DES LIENS DE NAVIGATION PAR RÔLE
     // ══════════════════════════════════════════════════════════
-    //  Chaque entrée contient :
-    //    - label : texte affiché
-    //    - to : chemin du routeur
-    //    - icon : composant lucide-react
-    //    - roles : tableau des rôles autorisés à voir ce lien
-    //
-    //  Les pages non encore implémentées (incidents, agents)
-    //  sont incluses avec des placeholders côté routeur.
     const navItems = [
         {
             label: 'Tableau de bord',
@@ -66,25 +49,31 @@ export default function Layout() {
             label: "File d'alertes",
             to: '/alerts',
             icon: ShieldAlert,
-            roles: ['L1', 'L2', 'MANAGER'], // ADMIN n'y a pas accès (contrat §6)
+            roles: ['L1', 'L2', 'MANAGER'],
         },
         {
             label: 'Incidents',
             to: '/incidents',
             icon: FileWarning,
-            roles: ['L1', 'L2', 'MANAGER'], // ADMIN n'y a pas accès
+            roles: ['L1', 'L2', 'MANAGER'],
         },
         {
             label: 'Supervision agents',
             to: '/agents',
             icon: MonitorCheck,
-            roles: ['MANAGER', 'ADMIN'], // L1/L2 n'y ont pas accès
+            roles: ['MANAGER', 'ADMIN'],
         },
         {
             label: 'Administration',
             to: '/admin/users',
             icon: Users,
-            roles: ['MANAGER', 'ADMIN'], // L1/L2 n'y ont pas accès
+            roles: ['MANAGER', 'ADMIN'],
+        },
+        {
+            label: "Journal d'activité",
+            to: '/admin/audit-log',
+            icon: ScrollText,
+            roles: ['MANAGER', 'ADMIN'],
         },
     ];
 
@@ -118,8 +107,6 @@ export default function Layout() {
                             to={item.to}
                             end={item.to === '/'}
                             className={({ isActive }) =>
-                                // État actif : fond emerald-50, texte/icône emerald-600
-                                // État inactif : texte gris-500 avec hover léger
                                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                                     isActive
                                         ? 'bg-brand-50 text-brand-600'
@@ -136,7 +123,6 @@ export default function Layout() {
                 {/* ── Footer : Profil + Déconnexion ────────────── */}
                 <div className="border-t border-gray-100 p-4">
                     <div className="flex items-center gap-3 mb-3">
-                        {/* Avatar avec initiale */}
                         <div className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-50 text-brand-600 font-semibold text-sm">
                             {user?.fullName?.charAt(0) || '?'}
                         </div>
@@ -161,7 +147,6 @@ export default function Layout() {
           CONTENU PRINCIPAL — Scrollable, fond gris clair
           ══════════════════════════════════════════════════════ */}
             <main className="flex-1 overflow-y-auto bg-gray-50">
-                {/* <Outlet /> affiche la page correspondant à la route active */}
                 <Outlet />
             </main>
         </div>
