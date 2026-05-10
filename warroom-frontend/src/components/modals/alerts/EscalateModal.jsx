@@ -25,7 +25,6 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ArrowUpRight } from 'lucide-react';
-import SeverityBadge from '../../ui/alerts/AlertSeverityBadge.jsx';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 
