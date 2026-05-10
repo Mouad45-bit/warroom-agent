@@ -1,5 +1,7 @@
 package com.warroom.server.controller;
 
+import com.warroom.server.dto.AddCountermeasureRequest;
+import com.warroom.server.dto.AddNoteRequest;
 import com.warroom.server.dto.CreateIncidentRequest;
 import com.warroom.server.dto.EscalateAlertRequest;
 import com.warroom.server.entity.Incident;
@@ -197,6 +199,47 @@ public class IncidentController {
 
             incidentService.closeIncident(incidentId, summary, userId);
             return ResponseEntity.ok(Map.of("message", "Incident clôturé avec succès"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+// POST /api/incidents/{incidentId}/countermeasures — Ajouter une contre-mesure (L2)
+// -----------------------------------------------------------------
+
+    @PostMapping("/{incidentId}/countermeasures")
+    @PreAuthorize("hasRole('L2')")
+    public ResponseEntity<?> addCountermeasure(@PathVariable("incidentId") Long incidentId,
+                                               @RequestBody AddCountermeasureRequest request,
+                                               Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            Map<String, Object> response = incidentService.addCountermeasure(incidentId, request, userId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+// -----------------------------------------------------------------
+// POST /api/incidents/{incidentId}/notes — Ajouter une note (L2, L1, Manager)
+// -----------------------------------------------------------------
+
+    @PostMapping("/{incidentId}/notes")
+    @PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER')")
+    public ResponseEntity<?> addNote(@PathVariable("incidentId") Long incidentId,
+                                     @RequestBody AddNoteRequest request,
+                                     Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            Role role = extractRole(auth);
+            Map<String, Object> response = incidentService.addNote(incidentId, request.content(), userId, role);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
         } catch (AccessDeniedException e) {

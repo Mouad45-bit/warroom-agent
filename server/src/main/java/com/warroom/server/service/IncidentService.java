@@ -1,5 +1,6 @@
 package com.warroom.server.service;
 
+import com.warroom.server.dto.AddCountermeasureRequest;
 import com.warroom.server.dto.CreateIncidentRequest;
 import com.warroom.server.entity.*;
 import com.warroom.server.model.*;
@@ -25,6 +26,10 @@ public class IncidentService {
     private final IncidentTimelineRepository timelineRepository;
     private final AlertRecordRepository alertRepository;
     private final UserRepository userRepository;
+    private static final Set<String> VALID_COUNTERMEASURE_TYPES = Set.of(
+            "BLOCK_IP", "DISABLE_ACCOUNT", "ISOLATE_MACHINE", "APPLY_PATCH",
+            "RESTART_SERVICE", "FIREWALL_RULE", "OTHER"
+    );
 
     public IncidentService(IncidentRepository incidentRepository,
                            IncidentAlertRepository incidentAlertRepository,
@@ -330,6 +335,110 @@ public class IncidentService {
                 IncidentStatus.RESOLVED, IncidentStatus.CLOSED);
 
         log.info("Incident {} clôturé par {}", incident.getIncidentNumber(), l2.getUsername());
+    }
+    // =================================================================
+// AJOUTER UNE CONTRE-MESURE (L2 assigné — Module 3)
+// =================================================================
+
+    @Transactional
+    public Map<String, Object> addCountermeasure(Long incidentId, AddCountermeasureRequest request, Long l2UserId) {
+        // Validations
+        if (request.description() == null || request.description().isBlank()) {
+            throw new IllegalArgumentException("La description est obligatoire");
+        }
+        if (request.type() == null || !VALID_COUNTERMEASURE_TYPES.contains(request.type().toUpperCase())) {
+            throw new IllegalArgumentException("Type de contre-mesure invalide. Valeurs autorisées : " + VALID_COUNTERMEASURE_TYPES);
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        // Vérifier que l'incident n'est pas clôturé
+        if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.CLOSED_FALSE_POSITIVE) {
+            throw new IllegalArgumentException("Impossible d'ajouter une contre-mesure sur un incident clôturé");
+        }
+
+        // Vérifier que c'est bien le L2 assigné
+        if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
+            throw new AccessDeniedException("Seul le L2 assigné peut ajouter une contre-mesure");
+        }
+
+        // Créer l'entrée timeline
+        User l2 = userRepository.findById(l2UserId).orElseThrow();
+
+        IncidentTimelineEntry entry = new IncidentTimelineEntry();
+        entry.setIncidentId(incidentId);
+        entry.setEntryType(TimelineEntryType.COUNTERMEASURE);
+        entry.setAuthorUserId(l2.getId());
+        entry.setAuthorFullName(l2.getFullName());
+        entry.setAuthorRole(l2.getRole().name());
+        entry.setContent(request.description());
+        entry.setCountermeasureType(request.type().toUpperCase());
+        entry.setTechnicalCommand(request.technicalCommand());
+
+        IncidentTimelineEntry saved = timelineRepository.save(entry);
+
+        log.info("Contre-mesure {} ajoutée sur incident {} par {}",
+                request.type(), incident.getIncidentNumber(), l2.getUsername());
+
+        // Construire la réponse avec warning conditionnel
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", saved.getId());
+        response.put("message", "Contre-mesure ajoutée");
+
+        if (incident.getStatus() != IncidentStatus.REMEDIATING) {
+            response.put("warning", "L'incident n'est pas en phase de remédiation");
+        } else {
+            response.put("warning", null);
+        }
+
+        return response;
+    }
+
+// =================================================================
+// AJOUTER UNE NOTE (L2 assigné, L1 créateur, Manager — Module 3)
+// =================================================================
+
+    @Transactional
+    public Map<String, Object> addNote(Long incidentId, String content, Long userId, Role userRole) {
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("Le contenu de la note est obligatoire");
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        // Vérifier que l'incident n'est pas clôturé
+        if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.CLOSED_FALSE_POSITIVE) {
+            throw new IllegalArgumentException("Impossible d'ajouter une note sur un incident clôturé");
+        }
+
+        // Vérifier les droits
+        boolean isAssignedL2 = incident.getAssignedToUserId() != null && incident.getAssignedToUserId().equals(userId);
+        boolean isCreatorL1 = incident.getCreatedByUserId().equals(userId);
+        boolean isManager = userRole == Role.MANAGER;
+
+        if (!isAssignedL2 && !isCreatorL1 && !isManager) {
+            throw new AccessDeniedException("Vous n'avez pas le droit d'ajouter une note sur cet incident");
+        }
+
+        // Créer l'entrée timeline
+        User author = userRepository.findById(userId).orElseThrow();
+
+        IncidentTimelineEntry entry = new IncidentTimelineEntry();
+        entry.setIncidentId(incidentId);
+        entry.setEntryType(TimelineEntryType.NOTE);
+        entry.setAuthorUserId(author.getId());
+        entry.setAuthorFullName(author.getFullName());
+        entry.setAuthorRole(author.getRole().name());
+        entry.setContent(content);
+
+        IncidentTimelineEntry saved = timelineRepository.save(entry);
+
+        log.info("Note ajoutée sur incident {} par {} ({})",
+                incident.getIncidentNumber(), author.getUsername(), userRole);
+
+        return Map.of("id", saved.getId(), "message", "Note ajoutée");
     }
 
     // =================================================================

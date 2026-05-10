@@ -42,6 +42,12 @@ public class IncidentTimelineEntry {
     @Column(nullable = false)
     private Instant createdAt;
 
+    // Pour les entrées de type COUNTERMEASURE uniquement
+    private String countermeasureType;  // "BLOCK_IP", "DISABLE_ACCOUNT", etc.
+
+    @Column(columnDefinition = "TEXT")
+    private String technicalCommand;    // Commande technique exécutée (optionnel)
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();
