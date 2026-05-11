@@ -1,0 +1,475 @@
+### ============================================================
+### WARROOM SOC — TESTS MODULE 3 : CONTRE-MESURES & NOTES
+### ============================================================
+### Prérequis :
+### 1. Modules 0, 1, 2 exécutés (users + alertes + incidents)
+### 2. Au moins un incident avec un L2 assigné
+### ============================================================
+
+@host = http://localhost:8080
+### Variables globales
+
+
+
+
+### ============================================================
+### PRÉREQUIS : CRÉER UN INCIDENT EN STATUT REMEDIATING
+### ============================================================
+
+### M3-0.1 — Login L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+### M3-0.2 — Trouver une alerte NEW
+GET {{host}}/api/alerts?status=NEW&size=1
+
+> {%
+    client.test("Alerte trouvée", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.content.length > 0);
+        client.global.set("m3AlertId", response.body.content[0].id);
+    });
+%}
+
+### M3-0.3 — Créer un incident assigné au L2
+POST {{host}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "MODULE3-TEST — Incident pour tester les contre-mesures",
+  "severity": "HIGH",
+  "triageNote": "Incident créé pour les tests Module 3.",
+  "assignedToUserId": {{l2UserId}},
+  "alertIds": [{{m3AlertId}}]
+}
+
+> {%
+    client.test("Incident Module 3 créé", function() {
+        client.assert(response.status === 201);
+        client.global.set("m3IncidentId", response.body.id);
+    });
+%}
+
+### M3-0.4 — Logout L1
+POST {{host}}/api/auth/logout
+
+### M3-0.5 — Login L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+### M3-0.6 — L2 fait avancer l'incident → INVESTIGATING
+PUT {{host}}/api/incidents/{{m3IncidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "INVESTIGATING",
+  "note": "Début de l'investigation pour les tests Module 3."
+}
+
+> {%
+    client.test("→ INVESTIGATING", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 1 : CONTRE-MESURES SUR UN INCIDENT NON-REMEDIATING
+### ============================================================
+
+### M3-1.1 — Contre-mesure sur INVESTIGATING → 201 + warning
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": "Blocage urgent de l'IP source avant passage en remédiation",
+  "technicalCommand": "iptables -A INPUT -s 192.168.1.50 -j DROP"
+}
+
+> {%
+    client.test("M3-1.1 Contre-mesure OK + warning", function() {
+        client.assert(response.status === 201);
+        client.assert(response.body.warning !== null, "Warning attendu car pas en REMEDIATING");
+        client.assert(response.body.id > 0, "ID de l'entrée timeline retourné");
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 2 : PASSAGE EN REMEDIATING + CONTRE-MESURES NORMALES
+### ============================================================
+
+### M3-2.1 — Passer en REMEDIATING
+PUT {{host}}/api/incidents/{{m3IncidentId}}/status
+Content-Type: application/json
+
+{
+  "newStatus": "REMEDIATING",
+  "note": "IP identifiée. Passage en remédiation."
+}
+
+> {%
+    client.test("→ REMEDIATING", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M3-2.2 — Contre-mesure BLOCK_IP (sans warning)
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": "Blocage définitif de l'IP source 192.168.1.50",
+  "technicalCommand": "iptables -A INPUT -s 192.168.1.50 -j DROP && iptables-save > /etc/iptables/rules.v4"
+}
+
+> {%
+    client.test("M3-2.2 BLOCK_IP OK sans warning", function() {
+        client.assert(response.status === 201);
+        client.assert(response.body.warning === null, "Pas de warning en REMEDIATING");
+    });
+%}
+
+### M3-2.3 — Contre-mesure DISABLE_ACCOUNT
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "DISABLE_ACCOUNT",
+  "description": "Désactivation du compte root compromis et changement de mot de passe",
+  "technicalCommand": "passwd -l root && usermod -s /usr/sbin/nologin root"
+}
+
+> {%
+    client.test("M3-2.3 DISABLE_ACCOUNT OK", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+### M3-2.4 — Contre-mesure FIREWALL_RULE sans commande technique
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "FIREWALL_RULE",
+  "description": "Ajout d'une règle UFW pour bloquer toute la plage 192.168.1.0/24 en entrée",
+  "technicalCommand": null
+}
+
+> {%
+    client.test("M3-2.4 FIREWALL sans commande OK", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+### M3-2.5 — Contre-mesure OTHER
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "OTHER",
+  "description": "Notification envoyée au responsable réseau pour isoler le segment VLAN 10"
+}
+
+> {%
+    client.test("M3-2.5 OTHER OK", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 3 : VALIDATIONS D'ERREURS (CONTRE-MESURES)
+### ============================================================
+
+### M3-3.1 — Description vide → 400
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": ""
+}
+
+> {%
+    client.test("M3-3.1 Description vide 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M3-3.2 — Type invalide → 400
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "NUKE_SERVER",
+  "description": "Action inventée"
+}
+
+> {%
+    client.test("M3-3.2 Type invalide 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M3-3.3 — Incident inexistant → 404
+POST {{host}}/api/incidents/99999/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": "Test sur incident fantôme"
+}
+
+> {%
+    client.test("M3-3.3 Incident 404", function() {
+        client.assert(response.status === 404 || response.status === 400);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 4 : NOTES
+### ============================================================
+
+### M3-4.1 — L2 assigné ajoute une note → 201
+POST {{host}}/api/incidents/{{m3IncidentId}}/notes
+Content-Type: application/json
+
+{
+  "content": "Vérifié les logs d'accès. L'IP 192.168.1.50 a tenté 200 connexions en 5 minutes."
+}
+
+> {%
+    client.test("M3-4.1 Note L2 OK", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+### M3-4.2 — Note vide → 400
+POST {{host}}/api/incidents/{{m3IncidentId}}/notes
+Content-Type: application/json
+
+{
+  "content": ""
+}
+
+> {%
+    client.test("M3-4.2 Note vide 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M3-4.3 — Logout L2
+POST {{host}}/api/auth/logout
+
+### M3-4.4 — Login L1 (créateur de l'incident)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+### M3-4.5 — L1 créateur ajoute une note → 201
+POST {{host}}/api/incidents/{{m3IncidentId}}/notes
+Content-Type: application/json
+
+{
+  "content": "J'ai retrouvé dans mes logs que cette IP avait déjà été signalée la semaine dernière."
+}
+
+> {%
+    client.test("M3-4.5 Note L1 créateur OK", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+### M3-4.6 — Logout L1
+POST {{host}}/api/auth/logout
+
+### M3-4.7 — Login Manager
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+### M3-4.8 — Manager ajoute une note → 201
+POST {{host}}/api/incidents/{{m3IncidentId}}/notes
+Content-Type: application/json
+
+{
+  "content": "Priorité haute. Escalader au RSSI si non résolu dans l'heure."
+}
+
+> {%
+    client.test("M3-4.8 Note Manager OK", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 5 : CONTRÔLE D'ACCÈS
+### ============================================================
+
+### M3-5.1 — Logout Manager
+POST {{host}}/api/auth/logout
+
+### M3-5.2 — Login Admin (ne devrait PAS pouvoir accéder aux incidents)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "admin", "password": "admin"}
+
+### M3-5.3 — Admin tente d'ajouter une contre-mesure → 403
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": "Admin ne devrait pas pouvoir"
+}
+
+> {%
+    client.test("M3-5.3 Admin interdit 403", function() {
+        client.assert(response.status === 403);
+    });
+%}
+
+### M3-5.4 — Logout Admin
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### SCÉNARIO 6 : VÉRIFICATION TIMELINE COMPLÈTE
+### ============================================================
+
+### M3-6.1 — Login L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+### M3-6.2 — Vérifier la timeline de l'incident (tout doit y être)
+GET {{host}}/api/incidents/{{m3IncidentId}}
+
+> {%
+    client.test("M3-6.2 Timeline complète", function() {
+        client.assert(response.status === 200);
+
+        var timeline = response.body.timeline;
+        client.assert(timeline.length >= 9, "Au moins 9 entrées timeline");
+
+        // Vérifier la présence des types
+        var types = timeline.map(e => e.entryType);
+        client.assert(types.includes("STATUS_CHANGE"), "STATUS_CHANGE présent");
+        client.assert(types.includes("COUNTERMEASURE"), "COUNTERMEASURE présent");
+        client.assert(types.includes("NOTE"), "NOTE présent");
+
+        // Compter les contre-mesures
+        var countermeasures = timeline.filter(e => e.entryType === "COUNTERMEASURE");
+        client.assert(countermeasures.length >= 5, "Au moins 5 contre-mesures");
+
+        // Vérifier que countermeasureType est rempli
+        var blockIp = countermeasures.find(c => c.countermeasureType === "BLOCK_IP");
+        client.assert(blockIp !== undefined, "BLOCK_IP trouvé");
+
+        // Vérifier que technicalCommand est rempli sur au moins une
+        var withCommand = countermeasures.find(c => c.technicalCommand !== null && c.technicalCommand.length > 0);
+        client.assert(withCommand !== undefined, "Au moins 1 avec commande technique");
+
+        // Compter les notes
+        var notes = timeline.filter(e => e.entryType === "NOTE");
+        client.assert(notes.length >= 3, "Au moins 3 notes (L2 + L1 + Manager)");
+
+        // Vérifier les rôles des auteurs de notes
+        var noteRoles = notes.map(n => n.authorRole);
+        client.assert(noteRoles.includes("L2"), "Note L2 présente");
+        client.assert(noteRoles.includes("L1"), "Note L1 présente");
+        client.assert(noteRoles.includes("MANAGER"), "Note Manager présente");
+    });
+%}
+
+### M3-6.3 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("Déconnexion OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 7 : CONTRE-MESURE SUR INCIDENT CLÔTURÉ → 400
+### ============================================================
+
+### M3-7.1 — Login L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+### M3-7.2 — Passer l'incident en RESOLVED puis CLOSED
+PUT {{host}}/api/incidents/{{m3IncidentId}}/status
+Content-Type: application/json
+
+{"newStatus": "RESOLVED", "note": "Contre-mesures appliquées, situation stable."}
+
+###
+PUT {{host}}/api/incidents/{{m3IncidentId}}/close
+Content-Type: application/json
+
+{"summary": "Attaque stoppée. IP bloquée. Comptes sécurisés."}
+
+### M3-7.3 — Tenter d'ajouter une contre-mesure sur incident CLOSED → 400
+POST {{host}}/api/incidents/{{m3IncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": "Trop tard, incident clôturé"
+}
+
+> {%
+    client.test("M3-7.3 Contre-mesure sur CLOSED → 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M3-7.4 — Tenter d'ajouter une note sur incident CLOSED → 400
+POST {{host}}/api/incidents/{{m3IncidentId}}/notes
+Content-Type: application/json
+
+{"content": "Trop tard aussi"}
+
+> {%
+    client.test("M3-7.4 Note sur CLOSED → 400", function() {
+        client.assert(response.status === 400);
+    });
+%}
+
+### M3-7.5 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### FIN DES TESTS MODULE 3
+### ============================================================
+### Résumé (7 scénarios, 30+ requêtes) :
+###   ✓ Contre-mesure sur incident non-REMEDIATING → 201 + warning
+###   ✓ Contre-mesure sur REMEDIATING → 201 sans warning
+###   ✓ 5 types de contre-mesures testés (BLOCK_IP, DISABLE_ACCOUNT, FIREWALL, OTHER)
+###   ✓ Commande technique optionnelle (avec et sans)
+###   ✓ Validations : description vide, type invalide, incident 404
+###   ✓ Notes par L2 assigné, L1 créateur, Manager
+###   ✓ Note vide → 400
+###   ✓ Admin interdit sur incidents → 403
+###   ✓ Timeline complète vérifiée (types, countermeasureType, roles)
+###   ✓ Contre-mesure/note sur incident CLOSED → 400
+### ============================================================

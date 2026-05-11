@@ -1,0 +1,187 @@
+### ============================================================
+### WARROOM SOC — TESTS MODULE 4 : VERSION CORRIGÉE
+### ============================================================
+### Prérequis :
+### - Module 0 (utilisateurs créés, admin/admin, ahmed.l1/MotDePasse123, karim.mgr/MotDePasse789)
+### - Vérifiez que sara.l2 existe (sinon créez-la avec mot de passe sara123)
+### - Les endpoints sont protégés (authenticated())
+### ============================================================
+
+@host = http://localhost:8080
+
+### ============================================================
+### 0. VÉRIFICATION SÉCURITÉ : Anonyme refusé
+### ============================================================
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("Anonyme doit être 401", function() {
+        client.assert(response.status === 401);
+    });
+%}
+
+### ============================================================
+### 1. LOGIN ADMIN et accès aux stats globales
+### ============================================================
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "admin", "password": "admin"}
+
+> {%
+    client.test("Login Admin OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("Admin lit stats globales (200)", function() {
+        client.assert(response.status === 200);
+        var s = response.body;
+        client.assert(s.alertsByStatus !== undefined);
+        client.assert(s.alertsBySeverity !== undefined);
+        client.assert(s.incidentsByStatus !== undefined);
+        client.assert(s.hasOwnProperty("mttd24h"));
+        client.assert(s.hasOwnProperty("mttr24h"));
+    });
+%}
+
+### Admin voit ses notifications (probablement vide)
+GET {{host}}/api/dashboard/notifications?unreadOnly=true
+
+> {%
+    client.test("Notifications Admin", function() {
+        client.assert(response.status === 200);
+        client.assert(Array.isArray(response.body));
+    });
+%}
+
+POST {{host}}/api/auth/logout
+
+### ============================================================
+### 2. LOGIN L1
+### ============================================================
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+> {%
+    client.test("Login L1 OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("L1 lit stats globales", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### L1 interdit sur /stats/manager
+GET {{host}}/api/dashboard/stats/manager
+
+> {%
+    client.test("L1 interdit sur stats Manager (403)", function() {
+        client.assert(response.status === 403);
+    });
+%}
+
+### Notifications L1
+GET {{host}}/api/dashboard/notifications?unreadOnly=true
+
+> {%
+    client.test("Notifications L1", function() {
+        client.assert(response.status === 200);
+        client.assert(Array.isArray(response.body));
+    });
+%}
+
+POST {{host}}/api/auth/logout
+
+### ============================================================
+### 3. LOGIN L2 (si utilisateur existe)
+### ============================================================
+### Si l'utilisateur "sara.l2" n'existe pas encore, créez-la d'abord.
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "sara123"}
+
+> {%
+    client.test("Login L2 OK", function() {
+        client.assert(response.status === 200, "Vérifiez que l'utilisateur sara.l2 existe et que son mot de passe est correct.");
+    });
+%}
+
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("L2 lit stats globales", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+GET {{host}}/api/dashboard/notifications?unreadOnly=true
+
+> {%
+    client.test("Notifications L2", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+POST {{host}}/api/auth/logout
+
+### ============================================================
+### 4. LOGIN MANAGER
+### ============================================================
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+> {%
+    client.test("Login Manager OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("Manager lit stats globales", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+GET {{host}}/api/dashboard/stats/manager
+
+> {%
+    client.test("Manager accès stats Manager", function() {
+        client.assert(response.status === 200);
+        var s = response.body;
+        client.assert(s.incidentsByAssignee !== undefined);
+        client.assert(s.triageRateByL1 !== undefined);
+    });
+%}
+
+POST {{host}}/api/auth/logout
+
+### ============================================================
+### 5. VÉRIFICATION DE LA SÉCURITÉ : Anonyme toujours refusé après déconnexion
+### ============================================================
+GET {{host}}/api/dashboard/stats
+
+> {%
+    client.test("Anonyme de nouveau 401", function() {
+        client.assert(response.status === 401);
+    });
+%}
+
+### ============================================================
+### FIN DES TESTS
+### ============================================================

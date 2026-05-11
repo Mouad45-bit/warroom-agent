@@ -25,14 +25,14 @@ public class EventAnalysisService {
     private final SseNotificationService sseService;
 
     public EventAnalysisService(List<EventAnalyzer> analyzerList,
-                                AlertRecordRepository alertRepository) {
+                                AlertRecordRepository alertRepository, SseNotificationService sseService) {
 
         // groupingBy regroupe tous les analyseurs qui ont le même sourceType dans une List
         this.analyzers = analyzerList.stream()
                 .collect(Collectors.groupingBy(EventAnalyzer::supportedSourceType));
 
         this.alertRepository = alertRepository;
-        this.sseService = new SseNotificationService();
+        this.sseService = sseService;
     }
 
     @Transactional

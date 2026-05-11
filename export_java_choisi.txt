@@ -1,0 +1,791 @@
+========================================================================================================================
+EXPORT JAVA INTERACTIF (FICHIERS .java UNIQUEMENT)
+PROJET : C:\Users\marwa\warroom-agent\server
+========================================================================================================================
+
+########################################################################################################################
+GROUPE : WARROOM/CONTROLLER
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\DashboardController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.User;
+import com.warroom.server.repository.AlertRecordRepository;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.DashboardService;
+import com.warroom.server.service.NotificationService;
+import com.warroom.server.service.SseNotificationService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/dashboard")
+@CrossOrigin(origins = "http://localhost:5173")
+public class DashboardController {
+
+    private final SseNotificationService sseService;
+    private final AlertRecordRepository alertRepository;
+    private final DashboardService dashboardService;
+    private final NotificationService notificationService;
+    private final UserRepository userRepository;
+
+    public DashboardController(SseNotificationService sseService,
+                               AlertRecordRepository alertRepository,
+                               DashboardService dashboardService,
+                               NotificationService notificationService,
+                               UserRepository userRepository) {
+        this.sseService = sseService;
+        this.alertRepository = alertRepository;
+        this.dashboardService = dashboardService;
+        this.notificationService = notificationService;
+        this.userRepository = userRepository;
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/dashboard/stream — Flux SSE temps réel (existant)
+    // -----------------------------------------------------------------
+
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamAlerts() {
+        log.info("Nouveau client connecté au flux SOC.");
+        return sseService.subscribe();
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/dashboard/alerts/history — Historique des alertes (existant)
+    // -----------------------------------------------------------------
+
+    @GetMapping("/alerts/history")
+    public List<AlertRecord> getHistory() {
+        return alertRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/dashboard/stats — Stats communes (tous les rôles)
+    // -----------------------------------------------------------------
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<Map<String, Object>> getStats() {
+        return ResponseEntity.ok(dashboardService.getStats());
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/dashboard/stats/manager — Stats Manager uniquement
+    // -----------------------------------------------------------------
+
+    @GetMapping("/stats/manager")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<Map<String, Object>> getManagerStats() {
+        return ResponseEntity.ok(dashboardService.getManagerStats());
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/dashboard/notifications — Notifications de l'utilisateur
+    // -----------------------------------------------------------------
+
+    @GetMapping("/notifications")
+    @PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<?> getNotifications(
+            @RequestParam(value = "unreadOnly", defaultValue = "true") boolean unreadOnly,
+            Authentication auth) {
+        Long userId = extractUserId(auth);
+        return ResponseEntity.ok(notificationService.getNotifications(userId, unreadOnly));
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/dashboard/notifications/{notifId}/read — Marquer comme lue
+    // -----------------------------------------------------------------
+
+    @PutMapping("/notifications/{notifId}/read")
+    @PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER', 'ADMIN')")
+    public ResponseEntity<?> markAsRead(@PathVariable("notifId") Long notifId, Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            notificationService.markAsRead(notifId, userId);
+            return ResponseEntity.ok(Map.of("message", "Notification marquée comme lue"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Utilitaire
+    // -----------------------------------------------------------------
+
+    private Long extractUserId(Authentication auth) {
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new IllegalStateException("Utilisateur introuvable"));
+        return user.getId();
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/SERVICE
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\DashboardService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.Incident;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.*;
+import com.warroom.server.repository.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class DashboardService {
+
+    private final AlertRecordRepository alertRepository;
+    private final IncidentRepository incidentRepository;
+    private final AgentRepository agentRepository;
+    private final UserRepository userRepository;
+
+    public DashboardService(AlertRecordRepository alertRepository,
+                            IncidentRepository incidentRepository,
+                            AgentRepository agentRepository,
+                            UserRepository userRepository) {
+        this.alertRepository = alertRepository;
+        this.incidentRepository = incidentRepository;
+        this.agentRepository = agentRepository;
+        this.userRepository = userRepository;
+    }
+
+    // =================================================================
+    // GET /api/dashboard/stats — Stats communes (tous les rôles)
+    // =================================================================
+
+    public Map<String, Object> getStats() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+
+        // --- Alertes par statut ---
+        Map<String, Long> alertsByStatus = new LinkedHashMap<>();
+        for (AlertStatus s : AlertStatus.values()) {
+            alertsByStatus.put(s.name(), alertRepository.countByStatus(s));
+        }
+        stats.put("alertsByStatus", alertsByStatus);
+
+        // --- Alertes NEW par sévérité (stock de travail L1) ---
+        Map<String, Long> alertsBySeverity = new LinkedHashMap<>();
+        List<AlertRecord> newAlerts = alertRepository.findAll().stream()
+                .filter(a -> a.getStatus() == AlertStatus.NEW)
+                .collect(Collectors.toList());
+        for (Severity sev : Severity.values()) {
+            long count = newAlerts.stream().filter(a -> a.getSeverity() == sev).count();
+            alertsBySeverity.put(sev.name(), count);
+        }
+        stats.put("alertsBySeverity", alertsBySeverity);
+
+        // --- Incidents par statut ---
+        Map<String, Long> incidentsByStatus = new LinkedHashMap<>();
+        for (IncidentStatus s : IncidentStatus.values()) {
+            incidentsByStatus.put(s.name(), incidentRepository.countByStatus(s));
+        }
+        stats.put("incidentsByStatus", incidentsByStatus);
+
+        // --- Agents connectés / warning / déconnectés ---
+        Instant now = Instant.now();
+        List<Agent> agents = agentRepository.findAll();
+        long connected = 0, warning = 0, disconnected = 0;
+        for (Agent agent : agents) {
+            if (agent.getLastSeenAt() == null) {
+                disconnected++;
+            } else {
+                long secondsAgo = Duration.between(agent.getLastSeenAt(), now).getSeconds();
+                if (secondsAgo < 90) {
+                    connected++;
+                } else if (secondsAgo < 300) {
+                    warning++;
+                } else {
+                    disconnected++;
+                }
+            }
+        }
+        stats.put("agentsConnected", connected);
+        stats.put("agentsWarning", warning);
+        stats.put("agentsDisconnected", disconnected);
+
+        // --- MTTD 24h (Mean Time To Detect) ---
+        // Moyenne de (qualifiedAt - createdAt) sur les alertes acquittées dans les 24h
+        Instant h24ago = now.minus(Duration.ofHours(24));
+        List<AlertRecord> recentAcknowledged = alertRepository.findAll().stream()
+                .filter(a -> a.getQualifiedAt() != null && a.getQualifiedAt().isAfter(h24ago))
+                .filter(a -> a.getStatus() == AlertStatus.ACKNOWLEDGED
+                        || a.getStatus() == AlertStatus.ESCALATED
+                        || a.getStatus() == AlertStatus.FALSE_POSITIVE)
+                .collect(Collectors.toList());
+
+        if (recentAcknowledged.isEmpty()) {
+            stats.put("mttd24h", null);
+        } else {
+            double avgSeconds = recentAcknowledged.stream()
+                    .mapToLong(a -> Duration.between(a.getCreatedAt(), a.getQualifiedAt()).getSeconds())
+                    .average()
+                    .orElse(0);
+            stats.put("mttd24h", Math.round(avgSeconds));
+        }
+
+        // --- MTTR 24h (Mean Time To Resolve) ---
+        // Moyenne de (updatedAt quand CLOSED - createdAt) sur les incidents clôturés dans les 24h
+        List<Incident> recentClosed = incidentRepository.findAll().stream()
+                .filter(i -> i.getStatus() == IncidentStatus.CLOSED)
+                .filter(i -> i.getUpdatedAt().isAfter(h24ago))
+                .collect(Collectors.toList());
+
+        if (recentClosed.isEmpty()) {
+            stats.put("mttr24h", null);
+        } else {
+            double avgSeconds = recentClosed.stream()
+                    .mapToLong(i -> Duration.between(i.getCreatedAt(), i.getUpdatedAt()).getSeconds())
+                    .average()
+                    .orElse(0);
+            stats.put("mttr24h", Math.round(avgSeconds));
+        }
+
+        return stats;
+    }
+
+    // =================================================================
+    // GET /api/dashboard/stats/manager — Stats Manager uniquement
+    // =================================================================
+
+    public Map<String, Object> getManagerStats() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        Instant h24ago = Instant.now().minus(Duration.ofHours(24));
+
+        // --- Incidents par assigné (L2) ---
+        List<User> l2Users = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.L2 && u.isActive())
+                .collect(Collectors.toList());
+
+        List<Incident> allIncidents = incidentRepository.findAll();
+
+        List<Map<String, Object>> incidentsByAssignee = new ArrayList<>();
+        for (User l2 : l2Users) {
+            List<Incident> assigned = allIncidents.stream()
+                    .filter(i -> l2.getId().equals(i.getAssignedToUserId()))
+                    .collect(Collectors.toList());
+
+            long openCount = assigned.stream()
+                    .filter(i -> i.getStatus() != IncidentStatus.CLOSED && i.getStatus() != IncidentStatus.CLOSED_FALSE_POSITIVE)
+                    .count();
+
+            List<Incident> closed = assigned.stream()
+                    .filter(i -> i.getStatus() == IncidentStatus.CLOSED)
+                    .collect(Collectors.toList());
+
+            Long avgResolution = null;
+            if (!closed.isEmpty()) {
+                double avg = closed.stream()
+                        .mapToLong(i -> Duration.between(i.getCreatedAt(), i.getUpdatedAt()).getSeconds())
+                        .average()
+                        .orElse(0);
+                avgResolution = Math.round(avg);
+            }
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("userId", l2.getId());
+            entry.put("fullName", l2.getFullName());
+            entry.put("openCount", openCount);
+            entry.put("totalAssigned", (long) assigned.size());
+            entry.put("avgResolutionTimeSeconds", avgResolution);
+            incidentsByAssignee.add(entry);
+        }
+        stats.put("incidentsByAssignee", incidentsByAssignee);
+
+        // --- Taux de triage par L1 ---
+        List<User> l1Users = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.L1 && u.isActive())
+                .collect(Collectors.toList());
+
+        List<AlertRecord> allAlerts = alertRepository.findAll();
+
+        List<Map<String, Object>> triageRateByL1 = new ArrayList<>();
+        for (User l1 : l1Users) {
+            List<AlertRecord> triaged = allAlerts.stream()
+                    .filter(a -> l1.getId().equals(a.getQualifiedByUserId()))
+                    .filter(a -> a.getQualifiedAt() != null && a.getQualifiedAt().isAfter(h24ago))
+                    .collect(Collectors.toList());
+
+            long alertsTriaged24h = triaged.size();
+
+            Long avgTriageTime = null;
+            if (!triaged.isEmpty()) {
+                double avg = triaged.stream()
+                        .mapToLong(a -> Duration.between(a.getCreatedAt(), a.getQualifiedAt()).getSeconds())
+                        .average()
+                        .orElse(0);
+                avgTriageTime = Math.round(avg);
+            }
+
+            // Taux faux positifs = FP / total qualifiées
+            long totalQualified = allAlerts.stream()
+                    .filter(a -> l1.getId().equals(a.getQualifiedByUserId()))
+                    .count();
+            long fpCount = allAlerts.stream()
+                    .filter(a -> l1.getId().equals(a.getQualifiedByUserId()))
+                    .filter(a -> a.getStatus() == AlertStatus.FALSE_POSITIVE)
+                    .count();
+            Double falsePositiveRate = totalQualified > 0 ? Math.round((double) fpCount / totalQualified * 100.0) / 100.0 : null;
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("userId", l1.getId());
+            entry.put("fullName", l1.getFullName());
+            entry.put("alertsTriaged24h", alertsTriaged24h);
+            entry.put("avgTriageTimeSeconds", avgTriageTime);
+            entry.put("falsePositiveRate", falsePositiveRate);
+            triageRateByL1.add(entry);
+        }
+        stats.put("triageRateByL1", triageRateByL1);
+
+        return stats;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\NotificationService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.entity.Notification;
+import com.warroom.server.model.NotificationType;
+import com.warroom.server.repository.NotificationRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Slf4j
+@Service
+public class NotificationService {
+
+    private final NotificationRepository notificationRepository;
+
+    public NotificationService(NotificationRepository notificationRepository) {
+        this.notificationRepository = notificationRepository;
+    }
+
+    /**
+     * Crée et persiste une notification.
+     * Appelé depuis IncidentService lors des actions clés.
+     */
+    public void notify(Long userId, NotificationType type, String message, Long relatedIncidentId) {
+        Notification notif = new Notification(userId, type, message, relatedIncidentId);
+        notificationRepository.save(notif);
+        log.info("Notification [{}] envoyée à userId={} : {}", type, userId, message);
+    }
+
+    /**
+     * Récupère les notifications d'un utilisateur.
+     */
+    public List<Notification> getNotifications(Long userId, boolean unreadOnly) {
+        if (unreadOnly) {
+            return notificationRepository.findTop50ByUserIdAndReadFalseOrderByCreatedAtDesc(userId);
+        }
+        return notificationRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    /**
+     * Marque une notification comme lue.
+     * Vérifie que la notification appartient bien à l'utilisateur.
+     */
+    @Transactional
+    public void markAsRead(Long notifId, Long userId) {
+        Notification notif = notificationRepository.findById(notifId)
+                .orElseThrow(() -> new IllegalArgumentException("Notification introuvable"));
+
+        if (!notif.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Cette notification ne vous appartient pas");
+        }
+
+        notif.setRead(true);
+        notificationRepository.save(notif);
+    }
+
+    /**
+     * Compteur de notifications non lues (pour le badge).
+     */
+    public long countUnread(Long userId) {
+        return notificationRepository.countByUserIdAndReadFalse(userId);
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/REPOSITORY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\NotificationRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.Notification;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface NotificationRepository extends JpaRepository<Notification, Long> {
+
+    // Notifications non lues d'un utilisateur, triées par date DESC, max 50
+    List<Notification> findTop50ByUserIdAndReadFalseOrderByCreatedAtDesc(Long userId);
+
+    // Toutes les notifications d'un utilisateur, triées par date DESC, max 50
+    List<Notification> findTop50ByUserIdOrderByCreatedAtDesc(Long userId);
+
+    // Compteur de non lues (pour le badge)
+    long countByUserIdAndReadFalse(Long userId);
+}
+
+########################################################################################################################
+GROUPE : WARROOM/ENTITY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\Notification.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.NotificationType;
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@NoArgsConstructor
+@Entity
+@Table(name = "notifications")
+public class Notification {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Long userId; // Destinataire
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationType type;
+
+    @Column(nullable = false)
+    private String message;
+
+    private Long relatedIncidentId; // Lien vers l'incident (nullable)
+
+    @Column(nullable = false)
+    private boolean read = false;
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+    }
+
+    public Notification(Long userId, NotificationType type, String message, Long relatedIncidentId) {
+        this.userId = userId;
+        this.type = type;
+        this.message = message;
+        this.relatedIncidentId = relatedIncidentId;
+        this.read = false;
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/DTO
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AddCountermeasureRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record AddCountermeasureRequest(
+        String type,               // "BLOCK_IP", "DISABLE_ACCOUNT", etc.
+        String description,        // Obligatoire — ce qui a été fait
+        String technicalCommand    // Optionnel — la commande exacte
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AddNoteRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record AddNoteRequest(
+        String content   // Le texte de la note — obligatoire
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentConfigDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.util.List;
+
+public record AgentConfigDto(
+        int heartbeatIntervalSeconds,
+        int batchSize,
+        int retryIntervalSeconds,
+        List<String> enabledCollectors
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentDetailResponse.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.AgentHealthRecord;
+import java.util.List;
+
+public record AgentDetailResponse(
+        Agent agent,
+        AgentHealthRecord latestRecord,
+        List<HeartbeatSummaryDto> recentHeartbeats,
+        List<ComponentHealthDto> components,
+        List<String> quarantinedComponents
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentHealthSnapshotDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record AgentHealthSnapshotDto(
+        String agentId,
+        String hostname,
+        Instant timestamp,
+        boolean running,
+        long queuedEvents,
+        long deliveredEvents,
+        Instant lastSuccessfulDeliveryAt,
+        Instant startedAt,
+        List<ComponentHealthDto> componentHealth,
+        long failedBatches,
+        long droppedEvents,
+        long enrollmentRetries,
+        long configRefreshFailures,
+        long componentRestarts,
+        Set<String> quarantinedComponents
+
+) {}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\AgentSummaryDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.warroom.server.model.HealthStatus;
+import java.time.Instant;
+
+public record AgentSummaryDto(
+        String agentId,
+        String hostname,
+        String osName,
+        String osVersion,
+        Instant lastSeenAt,
+        HealthStatus healthStatus,     // <-- Remplaçant de l'ancien statut
+        int activeCollectors,          // <-- Nouveauté du contrat
+        int totalCollectors            // <-- Nouveauté du contrat
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\ComponentHealthDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record ComponentHealthDto(
+        String componentName,
+        boolean running,
+        String statusMessage
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\CreateIncidentRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.util.List;
+
+// --- REQUÊTES ---
+
+public record CreateIncidentRequest(
+        String title,
+        String severity,
+        String triageNote,
+        Long assignedToUserId,     // nullable = pool L2
+        List<Long> alertIds        // au moins 1
+) {}
+
+// --- Utilisé par PUT /api/incidents/{id}/status ---
+// record ChangeStatusRequest dans un fichier séparé si préféré
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\CreateUserRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record CreateUserRequest(
+        String username,
+        String password,
+        String fullName,
+        String role,
+        String email
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EnrollmentRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record EnrollmentRequest(
+        String hostname,
+        String osName,
+        String osVersion,
+        String agentVersion
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EnrollmentResponse.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record EnrollmentResponse(
+        String agentId,
+        String apiKey
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EnvelopedEventDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.datatype.jsr310.deser.InstantDeserializer;
+
+import java.time.Instant;
+
+/**
+ * Représente un événement de sécurité reçu depuis un agent.
+ */
+public record EnvelopedEventDto(
+        String agentId,
+        String hostname,
+        String sourceType,
+        @JsonDeserialize(using = InstantDeserializer.class)
+        Instant collectedAt,
+        String payload
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\EscalateAlertRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.util.List;
+
+public record EscalateAlertRequest(
+        String title,
+        String severity,
+        String triageNote,
+        Long assignedToUserId,          // nullable = pool L2
+        List<Long> additionalAlertIds   // alertes supplémentaires à regrouper (peut être vide)
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\HeartbeatSummaryDto.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import com.warroom.server.model.HealthStatus;
+import java.time.Instant;
+
+public record HeartbeatSummaryDto(
+        Instant timestamp,
+        HealthStatus healthStatus,
+        long queuedEvents
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\LoginRequest.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+public record LoginRequest(
+        String username,
+        String password
+) {}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\dto\UserResponse.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.dto;
+
+import java.time.Instant;
+
+public record UserResponse(
+        Long userId,
+        String username,
+        String fullName,
+        String role,
+        String email,
+        boolean active,
+        Instant createdAt,
+        Instant lastLoginAt
+) {}
+
+########################################################################################################################
+GROUPE : WARROOM/MODEL
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\NotificationType.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum NotificationType {
+    INCIDENT_ASSIGNED,   // → L2 quand un incident lui est assigné
+    INCIDENT_RETURNED,   // → L1 quand son escalade est renvoyée
+    SLA_WARNING          // → MANAGER (future extension)
+}
+

@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,5 +12,18 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  # --- AJOUT DE PGADMIN ---
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: warroom-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@warroom.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres # Demande à Docker de démarrer PostgreSQL avant pgAdmin
+
 volumes:
   pgdata:
