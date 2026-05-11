@@ -19,6 +19,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/client'; // Ton vrai client Axios
 import { mockCheckSession, mockLogin, mockLogout } from '../api/mock/mockAuth.js'; // Le faux backend
+import { appConfig } from '../config/appConfig';
 
 // Création du contexte React (vide par défaut)
 const AuthContext = createContext(null);
@@ -28,7 +29,7 @@ const AuthContext = createContext(null);
 // true = Utilise les fausses données (pour coder l'UI)
 // false = Utilise le vrai backend Spring Boot (Production/Tests)
 // ══════════════════════════════════════════════════════════════
-const USE_MOCK_AUTH = true;
+const USE_MOCK_AUTH = appConfig.useMockAuth;
 
 // ── PROVIDER ────────────────────────────────────────────────
 // Enveloppe toute l'application dans <AuthProvider> (dans App.jsx).

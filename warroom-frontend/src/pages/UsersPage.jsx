@@ -20,6 +20,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
+import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import CreateUserModal from '../components/modals/users/CreateUserModal.jsx';
 import ConfirmModal from "../components/modals/ConfirmModal.jsx";
@@ -36,7 +37,7 @@ import {
 // true = Utilise les fausses données (pour coder l'UI)
 // false = Utilise le vrai backend Spring Boot
 // ══════════════════════════════════════════════════════════════
-const USE_MOCK_API = true;
+const USE_MOCK_API = appConfig.useMockApi;
 
 export default function UsersPage() {
     const { user: currentUser } = useAuth();

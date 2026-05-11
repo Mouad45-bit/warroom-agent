@@ -26,6 +26,7 @@ import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import FalsePositiveModal from '../components/modals/alerts/FalsePositiveModal.jsx';
 import AlertDetailModal from '../components/modals/alerts/AlertDetailModal.jsx';
+import { appConfig } from '../config/appConfig';
 import {
     mockGetAlerts,
     mockGetAlertDetail,
@@ -42,7 +43,7 @@ import {
 import { Search, Filter, Loader2, RotateCcw } from 'lucide-react';
 
 //
-const USE_MOCK_API = true;
+const USE_MOCK_API = appConfig.useMockApi;
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const STATUSES = ['NEW', 'ACKNOWLEDGED', 'FALSE_POSITIVE', 'ESCALATED'];

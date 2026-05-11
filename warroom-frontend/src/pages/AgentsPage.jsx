@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
+import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import AgentConfigModal from '../components/modals/agents/AgentConfigModal.jsx';
 import AgentDetailModal from '../components/modals/agents/AgentDetailModal.jsx'; // ← NOUVEL IMPORT
@@ -16,7 +17,7 @@ import {
 } from '../api/mock/mockAgents.js';
 import { Loader2, MonitorCheck } from 'lucide-react';
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = appConfig.useMockApi;
 
 // ── Constantes pour la liste ─────────────────────────────────
 const HEALTH_COLORS = {

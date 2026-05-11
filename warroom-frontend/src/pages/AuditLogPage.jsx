@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import { appConfig } from '../config/appConfig';
 import {
     mockGetAuditLog,
     mockGetAuditUsers,
@@ -32,7 +33,7 @@ import {
     ScrollText,
 } from 'lucide-react';
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = appConfig.useMockApi;
 const PAGE_SIZE = 30;
 
 // ══════════════════════════════════════════════════════════════

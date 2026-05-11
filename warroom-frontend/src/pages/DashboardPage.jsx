@@ -26,6 +26,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import {
     mockGetStats,
@@ -52,7 +53,7 @@ import {
     BarChart3,
 } from 'lucide-react';
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = appConfig.useMockApi;
 
 // ── Utilitaire : secondes → texte lisible ────────────────────
 function formatDuration(seconds) {

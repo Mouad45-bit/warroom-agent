@@ -37,6 +37,7 @@ import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx'
 import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import CountermeasureModal from '../components/modals/incidents/CountermeasureModal.jsx';
+import { appConfig } from '../config/appConfig';
 import {
     mockGetIncidents,
     mockGetIncidentDetail,
@@ -62,7 +63,7 @@ import {
 // true = Utilise les fausses données (pour coder l'UI)
 // false = Utilise le vrai backend Spring Boot
 // ══════════════════════════════════════════════════════════════
-const USE_MOCK_API = true;
+const USE_MOCK_API = appConfig.useMockApi;
 
 // ── Valeurs possibles pour les filtres ────────────────────
 const INCIDENT_STATUSES = ['OPEN', 'INVESTIGATING', 'REMEDIATING', 'RESOLVED', 'CLOSED', 'CLOSED_FALSE_POSITIVE'];
