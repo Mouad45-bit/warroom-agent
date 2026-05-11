@@ -27,6 +27,7 @@ import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ArrowRight, Undo2 } from 'lucide-react';
 import IncidentStatusBadge from '../../ui/incidents/IncidentStatusBadge.jsx';
 import { ACTION_THEME } from '../../../config/actionTheme.js';
+import { appConfig } from '../../../config/appConfig.js';
 
 // Labels français pour les statuts
 const STATUS_LABELS = {
@@ -61,9 +62,12 @@ export default function StatusChangeModal({
     if (!isOpen) return null;
 
     const theme = ACTION_THEME.takeIncident;
+    const minJustificationChars = appConfig.minChars.statusJustification;
+    const justificationLength = note.trim().length;
+    const isJustificationValid = justificationLength >= minJustificationChars;
 
     const handleSubmit = () => {
-        if (!selectedStatus || note.length < 5) return;
+        if (!selectedStatus || !isJustificationValid) return;
         onConfirm(selectedStatus, note);
     };
 
@@ -146,6 +150,9 @@ export default function StatusChangeModal({
                             placeholder="Expliquez la raison de ce changement de statut..."
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                         />
+                        <p className={`mt-1 text-xs ${isJustificationValid ? 'text-green-600' : 'text-gray-400'}`}>
+                            {justificationLength}/{minJustificationChars} caractères minimum
+                        </p>
                     </div>
                 )}
 
@@ -159,7 +166,7 @@ export default function StatusChangeModal({
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={submitting || !selectedStatus || note.length < 5}
+                        disabled={submitting || !selectedStatus || !isJustificationValid}
                         className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

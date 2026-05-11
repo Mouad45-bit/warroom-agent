@@ -20,6 +20,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, MessageSquare } from 'lucide-react';
 import { ACTION_THEME } from '../../../config/actionTheme.js';
+import { appConfig } from '../../../config/appConfig.js';
 
 export default function AddNoteModal({
                                          isOpen,
@@ -37,9 +38,12 @@ export default function AddNoteModal({
     if (!isOpen) return null;
 
     const theme = ACTION_THEME.addNote;
+    const minNoteChars = appConfig.minChars.addNote;
+    const noteLength = content.trim().length;
+    const isNoteValid = noteLength >= minNoteChars;
 
     const handleSubmit = () => {
-        if (content.length < 3) return;
+        if (!isNoteValid) return;
         onConfirm(content);
     };
 
@@ -78,6 +82,9 @@ export default function AddNoteModal({
                     placeholder="Partagez une observation, une piste d'investigation, ou une question..."
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                 />
+                <p className={`mt-1 text-xs ${isNoteValid ? 'text-green-600' : 'text-gray-400'}`}>
+                    {noteLength}/{minNoteChars} caractères minimum
+                </p>
 
                 {/* Boutons */}
                 <div className="flex justify-end gap-3 mt-6">
@@ -89,7 +96,7 @@ export default function AddNoteModal({
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={submitting || content.length < 3}
+                        disabled={submitting || !isNoteValid}
                         className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
