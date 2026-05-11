@@ -17,7 +17,13 @@
 // ══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
-import api from '../api/client';
+import {
+    getAlerts,
+    getAlertDetail,
+    acknowledgeAlert,
+    markFalsePositive,
+    escalateAlert,
+} from '../api/alertsApi';
 import { getL2Users } from '../api/usersApi';
 import { useAuth } from '../context/AuthContext';
 import useSSE from '../hooks/useSSE';
@@ -127,19 +133,19 @@ export default function AlertsPage() {
                 setTotalPages(data.totalPages);
                 setTotalElements(data.totalElements);
             } else {
-                const params = new URLSearchParams();
-                params.append('page', page);
-                params.append('size', PAGE_SIZE);
-                filters.severity.forEach(s => params.append('severity', s));
-                filters.status.forEach(s => params.append('status', s));
-                filters.sourceType.forEach(s => params.append('sourceType', s));
-                if (filters.agentId) params.append('agentId', filters.agentId);
-                if (filters.from) params.append('from', filters.from);
-                if (filters.to) params.append('to', filters.to);
-                const res = await api.get(`/api/alerts?${params.toString()}`);
-                setAlerts(res.data.content);
-                setTotalPages(res.data.totalPages);
-                setTotalElements(res.data.totalElements);
+                const data = await getAlerts({
+                    page,
+                    size: PAGE_SIZE,
+                    severity: filters.severity,
+                    status: filters.status,
+                    sourceType: filters.sourceType,
+                    agentId: filters.agentId,
+                    from: filters.from,
+                    to: filters.to,
+                });
+                setAlerts(data.content);
+                setTotalPages(data.totalPages);
+                setTotalElements(data.totalElements);
             }
         } catch (err) { console.error('Erreur chargement alertes :', err); }
         setLoadingList(false);
@@ -161,8 +167,11 @@ export default function AlertsPage() {
         try {
             const data = USE_MOCK_API
                 ? await mockGetAlertDetail(alertId)
-                : (await api.get(`/api/alerts/${alertId}`)).data;
-            setAlertDetail(data);
+                : await getAlertDetail(alertId);
+            setAlertDetail({
+                ...data,
+                relatedAlerts: data.relatedAlerts || [],
+            });
         } catch (err) { console.error('Erreur détail :', err); }
         setLoadingDetail(false);
     };
@@ -189,7 +198,7 @@ export default function AlertsPage() {
         try {
             const result = USE_MOCK_API
                 ? await mockAcknowledgeAlert(alertId)
-                : (await api.put(`/api/alerts/${alertId}/acknowledge`)).data;
+                : await acknowledgeAlert(alertId);
             setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, status: 'ACKNOWLEDGED', ...result } : a));
             if (alertDetail?.alert?.id === alertId) {
                 setAlertDetail(prev => ({ ...prev, alert: { ...prev.alert, status: 'ACKNOWLEDGED', ...result } }));
@@ -208,7 +217,7 @@ export default function AlertsPage() {
         try {
             const result = USE_MOCK_API
                 ? await mockFalsePositiveAlert(fpModal.alertId, justification)
-                : (await api.put(`/api/alerts/${fpModal.alertId}/false-positive`, { justification })).data;
+                : await markFalsePositive(fpModal.alertId, justification);
             setAlerts(prev => prev.map(a => a.id === fpModal.alertId ? { ...a, status: 'FALSE_POSITIVE', ...result } : a));
             if (alertDetail?.alert?.id === fpModal.alertId) closeDetail();
             setFpModal({ isOpen: false, alertId: null });
@@ -233,7 +242,7 @@ export default function AlertsPage() {
                 await mockCreateIncident({ title, severity, triageNote, assignedToUserId, alertIds });
             } else {
                 // Utilise l'endpoint raccourci depuis le détail d'alerte
-                await api.put(`/api/alerts/${alertDetail.alert.id}/escalate`, {
+                await escalateAlert(alertDetail.alert.id, {
                     title,
                     severity,
                     triageNote,
