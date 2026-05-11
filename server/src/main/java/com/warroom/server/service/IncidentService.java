@@ -26,7 +26,8 @@ public class IncidentService {
     private final IncidentTimelineRepository timelineRepository;
     private final AlertRecordRepository alertRepository;
     private final UserRepository userRepository;
-    private final NotificationService notificationService;
+    private final AuditService auditService;
+
     private static final Set<String> VALID_COUNTERMEASURE_TYPES = Set.of(
             "BLOCK_IP", "DISABLE_ACCOUNT", "ISOLATE_MACHINE", "APPLY_PATCH",
             "RESTART_SERVICE", "FIREWALL_RULE", "OTHER"
@@ -37,22 +38,21 @@ public class IncidentService {
                            IncidentTimelineRepository timelineRepository,
                            AlertRecordRepository alertRepository,
                            UserRepository userRepository,
-                           NotificationService notificationService) {
+                           AuditService auditService) {
         this.incidentRepository = incidentRepository;
         this.incidentAlertRepository = incidentAlertRepository;
         this.timelineRepository = timelineRepository;
         this.alertRepository = alertRepository;
         this.userRepository = userRepository;
-        this.notificationService = notificationService;
+        this.auditService = auditService;
     }
 
     // =================================================================
-    // CRÉER UN INCIDENT (L1 — escalade d'alertes)
+    // CRÉER UN INCIDENT
     // =================================================================
 
     @Transactional
     public Map<String, Object> createIncident(CreateIncidentRequest request, Long creatorUserId) {
-        // Validations
         if (request.triageNote() == null || request.triageNote().isBlank()) {
             throw new IllegalArgumentException("La note de triage est obligatoire");
         }
@@ -60,7 +60,6 @@ public class IncidentService {
             throw new IllegalArgumentException("Au moins une alerte doit être associée");
         }
 
-        // Vérifier que les alertes ne sont pas déjà escaladées
         for (Long alertId : request.alertIds()) {
             AlertRecord alert = alertRepository.findById(alertId)
                     .orElseThrow(() -> new IllegalArgumentException("Alerte " + alertId + " introuvable"));
@@ -69,11 +68,9 @@ public class IncidentService {
             }
         }
 
-        // Générer le numéro séquentiel
         long count = incidentRepository.count();
         String incidentNumber = String.format("INC-%04d", count + 1);
 
-        // Parser la sévérité
         Severity severity;
         try {
             severity = Severity.valueOf(request.severity().toUpperCase());
@@ -81,7 +78,6 @@ public class IncidentService {
             throw new IllegalArgumentException("Sévérité invalide : " + request.severity());
         }
 
-        // Créer l'incident
         Incident incident = new Incident();
         incident.setIncidentNumber(incidentNumber);
         incident.setTitle(request.title());
@@ -93,10 +89,8 @@ public class IncidentService {
 
         Incident saved = incidentRepository.save(incident);
 
-        // Lier les alertes et les marquer ESCALATED
         for (Long alertId : request.alertIds()) {
             incidentAlertRepository.save(new IncidentAlert(saved.getId(), alertId));
-
             AlertRecord alert = alertRepository.findById(alertId).orElseThrow();
             alert.setStatus(AlertStatus.ESCALATED);
             alert.setIncidentId(saved.getId());
@@ -105,51 +99,47 @@ public class IncidentService {
             alertRepository.save(alert);
         }
 
-        // Première entrée de timeline
         User creator = userRepository.findById(creatorUserId).orElseThrow();
         addTimelineEntry(saved.getId(), TimelineEntryType.STATUS_CHANGE, creator,
-                "Incident créé — " + request.triageNote(),
-                null, IncidentStatus.OPEN);
+                "Incident créé — " + request.triageNote(), null, IncidentStatus.OPEN);
+
+        // *** MODULE 6 — AUDIT INCIDENT_CREATED + ALERT_ESCALATED ***
+        auditService.log(creatorUserId, creator.getFullName(), creator.getRole().name(),
+                AuditAction.INCIDENT_CREATED, AuditTargetType.INCIDENT,
+                saved.getId().toString(), incidentNumber, request.triageNote());
+
+        for (Long alertId : request.alertIds()) {
+            auditService.log(creatorUserId, creator.getFullName(), creator.getRole().name(),
+                    AuditAction.ALERT_ESCALATED, AuditTargetType.ALERT,
+                    alertId.toString(), incidentNumber, null);
+        }
 
         log.info("Incident {} créé par {} avec {} alerte(s)", incidentNumber, creator.getUsername(), request.alertIds().size());
-
         return buildIncidentResponse(saved);
     }
 
     // =================================================================
-    // LISTER LES INCIDENTS (paginé)
+    // LISTER LES INCIDENTS
     // =================================================================
 
     public Page<Incident> getIncidents(int page, int size,
-                                       List<IncidentStatus> statuses,
-                                       List<Severity> severities,
-                                       Long assignedTo,
-                                       Long currentUserId, Role currentRole) {
-
+                                       List<IncidentStatus> statuses, List<Severity> severities,
+                                       Long assignedTo, Long currentUserId, Role currentRole) {
         Sort sort = Sort.by(Sort.Order.desc("severity"), Sort.Order.desc("createdAt"));
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        // L2 sans filtre → ses incidents par défaut
         if (currentRole == Role.L2 && assignedTo == null) {
             return incidentRepository.findByAssignedToUserId(currentUserId, pageRequest);
         }
-
-        // L1 → ses créations
         if (currentRole == Role.L1) {
             return incidentRepository.findByCreatedByUserId(currentUserId, pageRequest);
         }
-
-        // Filtre par assigné
         if (assignedTo != null) {
             return incidentRepository.findByAssignedToUserId(assignedTo, pageRequest);
         }
-
-        // Filtre par statut
         if (statuses != null && !statuses.isEmpty()) {
             return incidentRepository.findByStatusIn(statuses, pageRequest);
         }
-
-        // Tout (Manager ou L2 qui veut voir tout)
         return incidentRepository.findAll(pageRequest);
     }
 
@@ -164,13 +154,11 @@ public class IncidentService {
         Map<String, Object> detail = new HashMap<>();
         detail.put("incident", buildIncidentResponse(incident));
 
-        // Alertes liées
         List<IncidentAlert> links = incidentAlertRepository.findByIncidentId(incidentId);
         List<Long> alertIds = links.stream().map(IncidentAlert::getAlertId).collect(Collectors.toList());
         List<AlertRecord> alerts = alertRepository.findAllById(alertIds);
         detail.put("alerts", alerts);
 
-        // Timeline complète
         List<IncidentTimelineEntry> timeline = timelineRepository.findByIncidentIdOrderByCreatedAtAsc(incidentId);
         detail.put("timeline", timeline);
 
@@ -178,7 +166,7 @@ public class IncidentService {
     }
 
     // =================================================================
-    // PRENDRE EN CHARGE (L2 — pool → assigné)
+    // PRENDRE EN CHARGE
     // =================================================================
 
     @Transactional
@@ -201,11 +189,16 @@ public class IncidentService {
                 "Prise en charge par " + l2.getFullName(),
                 IncidentStatus.OPEN, IncidentStatus.INVESTIGATING);
 
+        // *** MODULE 6 — AUDIT INCIDENT_TAKEN ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_TAKEN, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), null);
+
         log.info("Incident {} pris en charge par {}", incident.getIncidentNumber(), l2.getUsername());
     }
 
     // =================================================================
-    // CHANGER LE STATUT (L2 assigné uniquement)
+    // CHANGER LE STATUT
     // =================================================================
 
     @Transactional
@@ -217,12 +210,10 @@ public class IncidentService {
         Incident incident = incidentRepository.findById(incidentId)
                 .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
 
-        // Vérifier que c'est bien le L2 assigné
         if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
             throw new AccessDeniedException("Seul le L2 assigné peut modifier le statut de cet incident");
         }
 
-        // Vérifier la transition
         IncidentStatus oldStatus = incident.getStatus();
         if (!IncidentStatusMachine.isAllowed(oldStatus, newStatus)) {
             throw new IllegalArgumentException(IncidentStatusMachine.errorMessage(oldStatus, newStatus));
@@ -234,11 +225,17 @@ public class IncidentService {
         User l2 = userRepository.findById(l2UserId).orElseThrow();
         addTimelineEntry(incidentId, TimelineEntryType.STATUS_CHANGE, l2, note, oldStatus, newStatus);
 
+        // *** MODULE 6 — AUDIT INCIDENT_STATUS_CHANGED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_STATUS_CHANGED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(),
+                oldStatus + " → " + newStatus);
+
         log.info("Incident {} : {} → {} par {}", incident.getIncidentNumber(), oldStatus, newStatus, l2.getUsername());
     }
 
     // =================================================================
-    // RÉASSIGNER (MANAGER uniquement)
+    // RÉASSIGNER
     // =================================================================
 
     @Transactional
@@ -262,23 +259,19 @@ public class IncidentService {
 
         User manager = userRepository.findById(managerUserId).orElseThrow();
         addTimelineEntry(incidentId, TimelineEntryType.REASSIGNMENT, manager,
-                "Réassigné à " + newAssignee.getFullName() + " — " + note,
-                null, null);
+                "Réassigné à " + newAssignee.getFullName() + " — " + note, null, null);
 
-        // NOUVEAU : On prévient le nouveau L2 qu'il a du travail !
-        notificationService.notify(
-                newAssigneeUserId,
-                NotificationType.INCIDENT_ASSIGNED,
-                "L'incident " + incident.getIncidentNumber() + " vous a été assigné.",
-                incidentId
-        );
+        // *** MODULE 6 — AUDIT INCIDENT_REASSIGNED ***
+        auditService.log(managerUserId, manager.getFullName(), manager.getRole().name(),
+                AuditAction.INCIDENT_REASSIGNED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(),
+                "→ " + newAssignee.getFullName());
 
-        log.info("Incident {} réassigné à {} par {}", incident.getIncidentNumber(),
-                newAssignee.getUsername(), manager.getUsername());
+        log.info("Incident {} réassigné à {} par {}", incident.getIncidentNumber(), newAssignee.getUsername(), manager.getUsername());
     }
 
     // =================================================================
-    // RENVOYER AU L1 (L2 assigné — faux positif)
+    // RENVOYER AU L1
     // =================================================================
 
     @Transactional
@@ -294,11 +287,9 @@ public class IncidentService {
             throw new AccessDeniedException("Seul le L2 assigné peut renvoyer cet incident");
         }
 
-        // Clôturer l'incident comme faux positif
         incident.setStatus(IncidentStatus.CLOSED_FALSE_POSITIVE);
         incidentRepository.save(incident);
 
-        // Reclassifier les alertes liées
         List<IncidentAlert> links = incidentAlertRepository.findByIncidentId(incidentId);
         for (IncidentAlert link : links) {
             alertRepository.findById(link.getAlertId()).ifPresent(alert -> {
@@ -313,19 +304,16 @@ public class IncidentService {
                 "Renvoyé au L1 (faux positif) — " + justification,
                 incident.getStatus(), IncidentStatus.CLOSED_FALSE_POSITIVE);
 
-        // NOUVEAU : On prévient le L1 que son incident a été rejeté
-        notificationService.notify(
-                incident.getCreatedByUserId(),
-                NotificationType.INCIDENT_RETURNED,
-                "Votre incident " + incident.getIncidentNumber() + " a été classé comme faux positif par le niveau 2.",
-                incidentId
-        );
+        // *** MODULE 6 — AUDIT INCIDENT_RETURNED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_RETURNED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), justification);
 
-        log.info("Incident {} renvoyé au L1 comme faux positif par {}", incident.getIncidentNumber(), l2.getUsername());
+        log.info("Incident {} renvoyé au L1 par {}", incident.getIncidentNumber(), l2.getUsername());
     }
 
     // =================================================================
-    // CLÔTURER (L2 assigné — résolution confirmée)
+    // CLÔTURER
     // =================================================================
 
     @Transactional
@@ -353,15 +341,20 @@ public class IncidentService {
                 "Incident clôturé — " + summary,
                 IncidentStatus.RESOLVED, IncidentStatus.CLOSED);
 
+        // *** MODULE 6 — AUDIT INCIDENT_CLOSED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_CLOSED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), summary);
+
         log.info("Incident {} clôturé par {}", incident.getIncidentNumber(), l2.getUsername());
     }
+
     // =================================================================
-// AJOUTER UNE CONTRE-MESURE (L2 assigné — Module 3)
-// =================================================================
+    // AJOUTER UNE CONTRE-MESURE
+    // =================================================================
 
     @Transactional
     public Map<String, Object> addCountermeasure(Long incidentId, AddCountermeasureRequest request, Long l2UserId) {
-        // Validations
         if (request.description() == null || request.description().isBlank()) {
             throw new IllegalArgumentException("La description est obligatoire");
         }
@@ -372,17 +365,14 @@ public class IncidentService {
         Incident incident = incidentRepository.findById(incidentId)
                 .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
 
-        // Vérifier que l'incident n'est pas clôturé
         if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.CLOSED_FALSE_POSITIVE) {
             throw new IllegalArgumentException("Impossible d'ajouter une contre-mesure sur un incident clôturé");
         }
 
-        // Vérifier que c'est bien le L2 assigné
         if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
             throw new AccessDeniedException("Seul le L2 assigné peut ajouter une contre-mesure");
         }
 
-        // Créer l'entrée timeline
         User l2 = userRepository.findById(l2UserId).orElseThrow();
 
         IncidentTimelineEntry entry = new IncidentTimelineEntry();
@@ -397,26 +387,24 @@ public class IncidentService {
 
         IncidentTimelineEntry saved = timelineRepository.save(entry);
 
-        log.info("Contre-mesure {} ajoutée sur incident {} par {}",
-                request.type(), incident.getIncidentNumber(), l2.getUsername());
+        // *** MODULE 6 — AUDIT INCIDENT_COUNTERMEASURE_ADDED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_COUNTERMEASURE_ADDED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), request.type());
 
-        // Construire la réponse avec warning conditionnel
+        log.info("Contre-mesure {} ajoutée sur incident {} par {}", request.type(), incident.getIncidentNumber(), l2.getUsername());
+
         Map<String, Object> response = new HashMap<>();
         response.put("id", saved.getId());
         response.put("message", "Contre-mesure ajoutée");
-
-        if (incident.getStatus() != IncidentStatus.REMEDIATING) {
-            response.put("warning", "L'incident n'est pas en phase de remédiation");
-        } else {
-            response.put("warning", null);
-        }
-
+        response.put("warning", incident.getStatus() != IncidentStatus.REMEDIATING
+                ? "L'incident n'est pas en phase de remédiation" : null);
         return response;
     }
 
-// =================================================================
-// AJOUTER UNE NOTE (L2 assigné, L1 créateur, Manager — Module 3)
-// =================================================================
+    // =================================================================
+    // AJOUTER UNE NOTE
+    // =================================================================
 
     @Transactional
     public Map<String, Object> addNote(Long incidentId, String content, Long userId, Role userRole) {
@@ -427,12 +415,10 @@ public class IncidentService {
         Incident incident = incidentRepository.findById(incidentId)
                 .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
 
-        // Vérifier que l'incident n'est pas clôturé
         if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.CLOSED_FALSE_POSITIVE) {
             throw new IllegalArgumentException("Impossible d'ajouter une note sur un incident clôturé");
         }
 
-        // Vérifier les droits
         boolean isAssignedL2 = incident.getAssignedToUserId() != null && incident.getAssignedToUserId().equals(userId);
         boolean isCreatorL1 = incident.getCreatedByUserId().equals(userId);
         boolean isManager = userRole == Role.MANAGER;
@@ -441,7 +427,6 @@ public class IncidentService {
             throw new AccessDeniedException("Vous n'avez pas le droit d'ajouter une note sur cet incident");
         }
 
-        // Créer l'entrée timeline
         User author = userRepository.findById(userId).orElseThrow();
 
         IncidentTimelineEntry entry = new IncidentTimelineEntry();
@@ -454,9 +439,12 @@ public class IncidentService {
 
         IncidentTimelineEntry saved = timelineRepository.save(entry);
 
-        log.info("Note ajoutée sur incident {} par {} ({})",
-                incident.getIncidentNumber(), author.getUsername(), userRole);
+        // *** MODULE 6 — AUDIT INCIDENT_NOTE_ADDED ***
+        auditService.log(userId, author.getFullName(), author.getRole().name(),
+                AuditAction.INCIDENT_NOTE_ADDED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), null);
 
+        log.info("Note ajoutée sur incident {} par {} ({})", incident.getIncidentNumber(), author.getUsername(), userRole);
         return Map.of("id", saved.getId(), "message", "Note ajoutée");
     }
 
@@ -491,7 +479,6 @@ public class IncidentService {
         response.put("createdAt", incident.getCreatedAt());
         response.put("updatedAt", incident.getUpdatedAt());
 
-        // Résoudre les noms
         if (incident.getAssignedToUserId() != null) {
             userRepository.findById(incident.getAssignedToUserId())
                     .ifPresent(u -> response.put("assignedToFullName", u.getFullName()));

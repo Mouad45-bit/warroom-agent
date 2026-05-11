@@ -1,11 +1,14 @@
 package com.warroom.server.service;
 
 import com.warroom.server.entity.AlertRecord;
-import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.entity.User;
 import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
 import com.warroom.server.model.Severity;
 import com.warroom.server.repository.AlertRecordRepository;
 import com.warroom.server.repository.SecurityEventRepository;
+import com.warroom.server.repository.UserRepository;
 import com.warroom.server.specification.AlertSpecifications;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -26,16 +29,18 @@ public class AlertService {
 
     private final AlertRecordRepository alertRepository;
     private final SecurityEventRepository eventRepository;
+    private final UserRepository userRepository;
+    private final AuditService auditService;
 
     public AlertService(AlertRecordRepository alertRepository,
-                        SecurityEventRepository eventRepository) {
+                        SecurityEventRepository eventRepository,
+                        UserRepository userRepository,
+                        AuditService auditService) {
         this.alertRepository = alertRepository;
         this.eventRepository = eventRepository;
+        this.userRepository = userRepository;
+        this.auditService = auditService;
     }
-
-    // -----------------------------------------------------------------
-    // LISTE PAGINÉE AVEC FILTRES COMBINÉS
-    // -----------------------------------------------------------------
 
     public Page<AlertRecord> getAlerts(int page, int size,
                                        List<Severity> severities,
@@ -43,7 +48,6 @@ public class AlertService {
                                        String agentId,
                                        Instant from, Instant to) {
 
-        // Construction dynamique de la requête avec Specification
         Specification<AlertRecord> spec = Specification.where(null);
 
         Specification<AlertRecord> sevSpec = AlertSpecifications.hasSeverityIn(severities);
@@ -61,18 +65,9 @@ public class AlertService {
         Specification<AlertRecord> toSpec = AlertSpecifications.createdBefore(to);
         if (toSpec != null) spec = spec.and(toSpec);
 
-        // Tri : sévérité DESC puis date DESC
-        Sort sort = Sort.by(
-                Sort.Order.desc("severity"),
-                Sort.Order.desc("createdAt")
-        );
-
+        Sort sort = Sort.by(Sort.Order.desc("severity"), Sort.Order.desc("createdAt"));
         return alertRepository.findAll(spec, PageRequest.of(page, size, sort));
     }
-
-    // -----------------------------------------------------------------
-    // DÉTAIL D'UNE ALERTE
-    // -----------------------------------------------------------------
 
     public Map<String, Object> getAlertDetail(Long alertId) {
         AlertRecord alert = alertRepository.findById(alertId)
@@ -81,26 +76,19 @@ public class AlertService {
         Map<String, Object> detail = new HashMap<>();
         detail.put("alert", alert);
 
-        // SecurityEvent source (le log brut qui a déclenché l'alerte)
         if (alert.getEventId() != null) {
             eventRepository.findById(alert.getEventId())
                     .ifPresent(event -> detail.put("sourceEvent", event));
         }
 
-        // Info agent
         detail.put("agent", alert.getAgent());
 
-        // Contexte : 10 dernières alertes du même agent
         List<AlertRecord> recentAlerts = alertRepository
                 .findTop10ByAgent_AgentIdOrderByCreatedAtDesc(alert.getAgent().getAgentId());
         detail.put("recentAlerts", recentAlerts);
 
         return detail;
     }
-
-    // -----------------------------------------------------------------
-    // ACQUITTER UNE ALERTE (L1 uniquement)
-    // -----------------------------------------------------------------
 
     @Transactional
     public AlertRecord acknowledge(Long alertId, Long userId) {
@@ -116,12 +104,17 @@ public class AlertService {
         alert.setQualifiedAt(Instant.now());
 
         log.info("Alerte {} acquittée par userId={}", alertId, userId);
+
+        // *** MODULE 6 — AUDIT ALERT_ACKNOWLEDGED ***
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            auditService.log(userId, user.getFullName(), user.getRole().name(),
+                    AuditAction.ALERT_ACKNOWLEDGED, AuditTargetType.ALERT,
+                    alertId.toString(), alert.getRuleId(), null);
+        }
+
         return alertRepository.save(alert);
     }
-
-    // -----------------------------------------------------------------
-    // QUALIFIER EN FAUX POSITIF (L1 uniquement)
-    // -----------------------------------------------------------------
 
     @Transactional
     public AlertRecord markFalsePositive(Long alertId, Long userId, String justification) {
@@ -146,6 +139,15 @@ public class AlertService {
         alert.setJustification(justification);
 
         log.info("Alerte {} qualifiée faux positif par userId={}", alertId, userId);
+
+        // *** MODULE 6 — AUDIT ALERT_FALSE_POSITIVE ***
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            auditService.log(userId, user.getFullName(), user.getRole().name(),
+                    AuditAction.ALERT_FALSE_POSITIVE, AuditTargetType.ALERT,
+                    alertId.toString(), alert.getRuleId(), justification);
+        }
+
         return alertRepository.save(alert);
     }
 }

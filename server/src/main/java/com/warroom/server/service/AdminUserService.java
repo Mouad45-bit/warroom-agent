@@ -3,6 +3,8 @@ package com.warroom.server.service;
 import com.warroom.server.dto.CreateUserRequest;
 import com.warroom.server.dto.UserResponse;
 import com.warroom.server.entity.User;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
 import com.warroom.server.model.Role;
 import com.warroom.server.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -23,11 +25,16 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final SessionRegistry sessionRegistry;
+    private final AuditService auditService;
 
-    public AdminUserService(UserRepository userRepository, PasswordEncoder passwordEncoder, SessionRegistry sessionRegistry) {
+    public AdminUserService(UserRepository userRepository,
+                            PasswordEncoder passwordEncoder,
+                            SessionRegistry sessionRegistry,
+                            AuditService auditService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.sessionRegistry = sessionRegistry;
+        this.auditService = auditService;
     }
 
     public List<UserResponse> getAllUsers() {
@@ -36,13 +43,18 @@ public class AdminUserService {
                 .collect(Collectors.toList());
     }
 
+
+
+    /**
+     * Version avec contexte d'audit (appelée depuis le controller avec userId de l'admin).
+     */
     @Transactional
-    public UserResponse createUser(CreateUserRequest request, Role currentUserRole) {
+    public UserResponse createUser(CreateUserRequest request, Role currentUserRole,
+                                   Long adminUserId, String adminFullName, String adminRole) {
         if (userRepository.existsByUsername(request.username())) {
             throw new IllegalArgumentException("Ce nom d'utilisateur est déjà pris.");
         }
 
-        // CORRECTION 2 : Try-catch pour gérer les rôles invalides sans crasher
         Role targetRole;
         try {
             targetRole = Role.valueOf(request.role().toUpperCase());
@@ -50,7 +62,6 @@ public class AdminUserService {
             throw new IllegalArgumentException("Rôle invalide. Les rôles autorisés sont : L1, L2, MANAGER, ADMIN.");
         }
 
-        // Règle : Un MANAGER ne peut créer que des L1 ou L2
         if (currentUserRole == Role.MANAGER && (targetRole == Role.ADMIN || targetRole == Role.MANAGER)) {
             throw new AccessDeniedException("Vous ne pouvez créer que des comptes L1 et L2.");
         }
@@ -66,11 +77,28 @@ public class AdminUserService {
 
         User savedUser = userRepository.save(user);
         log.info("Nouvel utilisateur créé : {} par un {}", savedUser.getUsername(), currentUserRole);
+
+        // *** MODULE 6 — AUDIT USER_CREATED ***
+        if (adminUserId != null) {
+            auditService.log(adminUserId, adminFullName, adminRole,
+                    AuditAction.USER_CREATED, AuditTargetType.USER,
+                    savedUser.getId().toString(), savedUser.getUsername(), "Rôle : " + targetRole);
+        }
+
         return mapToResponse(savedUser);
     }
 
     @Transactional
     public void disableUser(Long userId, String currentUsername, Role currentUserRole) {
+        disableUser(userId, currentUsername, currentUserRole, null, null, null);
+    }
+
+    /**
+     * Version avec contexte d'audit.
+     */
+    @Transactional
+    public void disableUser(Long userId, String currentUsername, Role currentUserRole,
+                            Long adminUserId, String adminFullName, String adminRole) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Utilisateur introuvable."));
 
@@ -82,7 +110,6 @@ public class AdminUserService {
             throw new AccessDeniedException("Vous ne pouvez désactiver que des comptes L1 et L2.");
         }
 
-        // CORRECTION 1 : Requête SQL optimisée au lieu de charger toute la RAM
         if (user.getRole() == Role.ADMIN) {
             long adminCount = userRepository.countByRoleAndActiveTrue(Role.ADMIN);
             if (adminCount <= 1) {
@@ -90,11 +117,9 @@ public class AdminUserService {
             }
         }
 
-        // Désactivation en base de données
         user.setActive(false);
         userRepository.save(user);
 
-        // --- LA MAGIE : DÉCONNEXION EN TEMPS RÉEL ---
         sessionRegistry.getAllPrincipals().stream()
                 .filter(principal -> principal instanceof org.springframework.security.core.userdetails.User)
                 .map(principal -> (org.springframework.security.core.userdetails.User) principal)
@@ -107,6 +132,13 @@ public class AdminUserService {
                 });
 
         log.warn("Compte désactivé et sessions tuées pour : {}", user.getUsername());
+
+        // *** MODULE 6 — AUDIT USER_DISABLED ***
+        if (adminUserId != null) {
+            auditService.log(adminUserId, adminFullName, adminRole,
+                    AuditAction.USER_DISABLED, AuditTargetType.USER,
+                    userId.toString(), user.getUsername(), null);
+        }
     }
 
     @Transactional
