@@ -25,9 +25,11 @@
 //  ProtectedRoute le redirigera vers le dashboard.
 // ══════════════════════════════════════════════════════════════
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import {BrowserRouter, Routes, Route} from 'react-router-dom';
+import {AuthProvider} from './context/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute.jsx';
+import {ActionFeedbackProvider}
+    from './components/ui/feedback/ActionFeedbackProvider.jsx';
 import Layout from './components/layout/Layout.jsx';
 
 // Pages
@@ -43,49 +45,51 @@ export default function App() {
     return (
         // AuthProvider enveloppe tout : le contexte est accessible partout.
         <AuthProvider>
-            <BrowserRouter>
-                <Routes>
-                    {/* ── Route publique : page de login ──────────── */}
-                    <Route path="/login" element={<LoginPage />} />
+            <ActionFeedbackProvider>
+                <BrowserRouter>
+                    <Routes>
+                        {/* ── Route publique : page de login ──────────── */}
+                        <Route path="/login" element={<LoginPage/>}/>
 
-                    {/* ── Routes protégées : nécessitent une session ── */}
-                    {/* Le Layout (Sidebar + contenu) s'affiche pour toutes
+                        {/* ── Routes protégées : nécessitent une session ── */}
+                        {/* Le Layout (Sidebar + contenu) s'affiche pour toutes
               les routes enfants via <Outlet />. */}
-                    <Route element={<ProtectedRoute />}>
-                        <Route element={<Layout />}>
+                        <Route element={<ProtectedRoute/>}>
+                            <Route element={<Layout/>}>
 
-                            {/* Tableau de bord — tous les rôles (placeholder Module 4) */}
-                            <Route path="/" element={<DashboardPage />} />
+                                {/* Tableau de bord — tous les rôles (placeholder Module 4) */}
+                                <Route path="/" element={<DashboardPage/>}/>
 
-                            {/* File d'alertes — L1, L2, MANAGER (contrat §6) */}
-                            <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']} />}>
-                                <Route path="/alerts" element={<AlertsPage />} />
+                                {/* File d'alertes — L1, L2, MANAGER (contrat §6) */}
+                                <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']}/>}>
+                                    <Route path="/alerts" element={<AlertsPage/>}/>
+                                </Route>
+
+                                {/* Incidents — L1, L2, MANAGER (placeholder Module 2) */}
+                                <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']}/>}>
+                                    <Route path="/incidents" element={<IncidentsPage/>}/>
+                                </Route>
+
+                                {/* Supervision agents — MANAGER, ADMIN (placeholder Module 5) */}
+                                <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']}/>}>
+                                    <Route path="/agents" element={<AgentsPage/>}/>
+                                </Route>
+
+                                {/* Administration des comptes — MANAGER, ADMIN */}
+                                <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']}/>}>
+                                    <Route path="/admin/users" element={<UsersPage/>}/>
+                                </Route>
+
+                                {/* Journal d'activité — MANAGER, ADMIN (Module 6) */}
+                                <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']}/>}>
+                                    <Route path="/admin/audit-log" element={<AuditLogPage/>}/>
+                                </Route>
+
                             </Route>
-
-                            {/* Incidents — L1, L2, MANAGER (placeholder Module 2) */}
-                            <Route element={<ProtectedRoute allowedRoles={['L1', 'L2', 'MANAGER']} />}>
-                                <Route path="/incidents" element={<IncidentsPage />} />
-                            </Route>
-
-                            {/* Supervision agents — MANAGER, ADMIN (placeholder Module 5) */}
-                            <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
-                                <Route path="/agents" element={<AgentsPage />} />
-                            </Route>
-
-                            {/* Administration des comptes — MANAGER, ADMIN */}
-                            <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
-                                <Route path="/admin/users" element={<UsersPage />} />
-                            </Route>
-
-                            {/* Journal d'activité — MANAGER, ADMIN (Module 6) */}
-                            <Route element={<ProtectedRoute allowedRoles={['MANAGER', 'ADMIN']} />}>
-                                <Route path="/admin/audit-log" element={<AuditLogPage />} />
-                            </Route>
-
                         </Route>
-                    </Route>
-                </Routes>
-            </BrowserRouter>
+                    </Routes>
+                </BrowserRouter>
+            </ActionFeedbackProvider>
         </AuthProvider>
     );
 }

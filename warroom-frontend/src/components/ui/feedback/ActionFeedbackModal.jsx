@@ -84,7 +84,7 @@ export default function ActionFeedbackModal
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 cursor-pointer"
                         >
                             {cancelText}
                         </button>
@@ -92,7 +92,7 @@ export default function ActionFeedbackModal
                         <button
                             type="button"
                             onClick={onConfirm}
-                            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${config.confirmBtn}`}
+                            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${config.confirmBtn} cursor-pointer`}
                         >
                             {confirmText || 'Confirmer'}
                         </button>
@@ -101,9 +101,9 @@ export default function ActionFeedbackModal
                     <button
                         type="button"
                         onClick={onClose}
-                        className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${config.confirmBtn}`}
+                        className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${config.confirmBtn} cursor-pointer`}
                     >
-                        OK
+                        D'accord
                     </button>
                 )}
             </div>
