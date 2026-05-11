@@ -77,7 +77,7 @@ export default function UsersPage() {
                 : 'Activer cet utilisateur ?',
             message: `Voulez-vous vraiment ${actionLabel} le compte de ${targetUser.fullName} ?`,
             confirmText: isCurrentlyActive ? 'Désactiver' : 'Activer',
-            variant: isCurrentlyActive ? 'danger' : 'success',
+            variant: isCurrentlyActive ? 'disableUser' : 'activateUser',
         });
 
         if (!confirmed) return;

@@ -27,6 +27,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ShieldPlus } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 // ── Types de contre-mesures (contrat §3.1.2) ────────────────
 const COUNTERMEASURE_TYPES = [
@@ -63,6 +64,8 @@ export default function CountermeasureModal
 
     if (!isOpen) return null;
 
+    const theme = ACTION_THEME.countermeasure;
+
     const handleSubmit = () => {
         if (description.length < 5) return;
         onConfirm({
@@ -79,8 +82,8 @@ export default function CountermeasureModal
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-orange-100">
-                            <ShieldPlus className="w-5 h-5 text-orange-600" />
+                        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${theme.iconBg}`}>
+                            <ShieldPlus className={`w-5 h-5 ${theme.iconText}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             Ajouter une contre-mesure
@@ -171,7 +174,7 @@ export default function CountermeasureModal
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || description.length < 5}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Ajouter

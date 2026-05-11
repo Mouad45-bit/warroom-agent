@@ -19,6 +19,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 export default function ReturnToL1Modal({
                                             isOpen,
@@ -35,6 +36,8 @@ export default function ReturnToL1Modal({
 
     if (!isOpen) return null;
 
+    const theme = ACTION_THEME.returnToL1;
+
     const handleSubmit = () => {
         if (justification.length < 10) return;
         onConfirm(justification);
@@ -47,8 +50,8 @@ export default function ReturnToL1Modal({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-100">
-                            <Undo2 className="w-5 h-5 text-amber-600" />
+                        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${theme.iconBg}`}>
+                            <Undo2 className={`w-5 h-5 ${theme.iconText}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             Renvoyer au L1
@@ -103,7 +106,7 @@ export default function ReturnToL1Modal({
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || justification.length < 10}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-600 text-white text-sm font-medium rounded-xl hover:bg-amber-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Renvoyer comme faux positif

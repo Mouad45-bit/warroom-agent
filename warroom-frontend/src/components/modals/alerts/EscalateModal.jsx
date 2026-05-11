@@ -26,6 +26,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ArrowUpRight } from 'lucide-react';
 import AlertSeverityBadge from "../../ui/alerts/AlertSeverityBadge.jsx";
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 
@@ -58,6 +59,8 @@ export default function EscalateModal({
 
     if (!isOpen) return null;
 
+    const theme = ACTION_THEME.escalate;
+
     const toggleAdditionalAlert = (alertId) => {
         setAdditionalAlertIds(prev =>
             prev.includes(alertId) ? prev.filter(id => id !== alertId) : [...prev, alertId]
@@ -87,8 +90,8 @@ export default function EscalateModal({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100">
-                            <ArrowUpRight className="w-5 h-5 text-purple-600" />
+                        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${theme.iconBg}`}>
+                            <ArrowUpRight className={`w-5 h-5 ${theme.iconText}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             Escalader en incident
@@ -220,7 +223,7 @@ export default function EscalateModal({
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || triageNote.length < 10 || !title.trim()}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Escalader

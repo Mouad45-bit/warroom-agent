@@ -19,6 +19,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, MessageSquare } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 export default function AddNoteModal({
                                          isOpen,
@@ -35,6 +36,8 @@ export default function AddNoteModal({
 
     if (!isOpen) return null;
 
+    const theme = ACTION_THEME.addNote;
+
     const handleSubmit = () => {
         if (content.length < 3) return;
         onConfirm(content);
@@ -47,8 +50,8 @@ export default function AddNoteModal({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-100">
-                            <MessageSquare className="w-5 h-5 text-gray-600" />
+                        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${theme.iconBg}`}>
+                            <MessageSquare className={`w-5 h-5 ${theme.iconText}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             Ajouter une note
@@ -80,14 +83,14 @@ export default function AddNoteModal({
                 <div className="flex justify-end gap-3 mt-6">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2.5 text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                        className={`px-4 py-2.5 text-sm font-medium rounded-xl transition-colors cursor-pointer ${theme.cancel}`}
                     >
                         Annuler
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || content.length < 3}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Ajouter

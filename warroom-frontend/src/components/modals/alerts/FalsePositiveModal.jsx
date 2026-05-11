@@ -17,6 +17,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2 } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 export default function FalsePositiveModal({ isOpen, onClose, onConfirm, submitting = false, error = null }) {
     const [justification, setJustification] = useState('');
@@ -27,6 +28,8 @@ export default function FalsePositiveModal({ isOpen, onClose, onConfirm, submitt
     }, [isOpen]);
 
     if (!isOpen) return null;
+
+    const theme = ACTION_THEME.falsePositive;
 
     const handleSubmit = () => {
         onConfirm(justification);
@@ -77,14 +80,14 @@ export default function FalsePositiveModal({ isOpen, onClose, onConfirm, submitt
                 <div className="flex justify-end gap-3 mt-6">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2.5 text-sm font-medium text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                        className={`px-4 py-2.5 text-sm font-medium rounded-xl transition-colors cursor-pointer ${theme.cancel}`}
                     >
                         Annuler
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={submitting}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Confirmer

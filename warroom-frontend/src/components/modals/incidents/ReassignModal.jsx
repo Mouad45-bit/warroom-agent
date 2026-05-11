@@ -19,6 +19,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, UserCheck } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 export default function ReassignModal({
                                           isOpen,
@@ -41,6 +42,8 @@ export default function ReassignModal({
 
     if (!isOpen) return null;
 
+    const theme = ACTION_THEME.reassignIncident;
+
     const handleSubmit = () => {
         if (!selectedUserId || note.length < 5) return;
         onConfirm(Number(selectedUserId), note);
@@ -53,8 +56,8 @@ export default function ReassignModal({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-100">
-                            <UserCheck className="w-5 h-5 text-blue-600" />
+                        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${theme.iconBg}`}>
+                            <UserCheck className={`w-5 h-5 ${theme.iconText}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             Réassigner l'incident
@@ -121,7 +124,7 @@ export default function ReassignModal({
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || !selectedUserId || note.length < 5}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Réassigner

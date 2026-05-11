@@ -19,6 +19,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 export default function CloseIncidentModal({
                                                isOpen,
@@ -35,6 +36,8 @@ export default function CloseIncidentModal({
 
     if (!isOpen) return null;
 
+    const theme = ACTION_THEME.closeIncident;
+
     const handleSubmit = () => {
         if (summary.length < 10) return;
         onConfirm(summary);
@@ -47,8 +50,8 @@ export default function CloseIncidentModal({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-100">
-                            <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${theme.iconBg}`}>
+                            <CheckCircle2 className={`w-5 h-5 ${theme.iconText}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-gray-900">
                             Clôturer l'incident
@@ -101,7 +104,7 @@ export default function CloseIncidentModal({
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || summary.length < 10}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Clôturer définitivement

@@ -26,6 +26,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, Loader2, ArrowRight, Undo2 } from 'lucide-react';
 import IncidentStatusBadge from '../../ui/incidents/IncidentStatusBadge.jsx';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
 // Labels français pour les statuts
 const STATUS_LABELS = {
@@ -58,6 +59,8 @@ export default function StatusChangeModal({
     }, [isOpen]);
 
     if (!isOpen) return null;
+
+    const theme = ACTION_THEME.takeIncident;
 
     const handleSubmit = () => {
         if (!selectedStatus || note.length < 5) return;
@@ -157,7 +160,7 @@ export default function StatusChangeModal({
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || !selectedStatus || note.length < 5}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl disabled:opacity-50 transition-colors cursor-pointer ${theme.button}`}
                     >
                         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                         Confirmer

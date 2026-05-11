@@ -222,7 +222,7 @@ export default function IncidentsPage() {
             title: 'Prendre en charge cet incident ?',
             message: 'L’incident vous sera assigné et passera dans votre file de traitement.',
             confirmText: 'Prendre en charge',
-            variant: 'info',
+            variant: 'takeIncident',
         });
 
         if (!confirmed) return;
@@ -387,7 +387,7 @@ export default function IncidentsPage() {
             title: 'Clôturer cet incident ?',
             message: 'Une fois clôturé, l’incident ne pourra plus être modifié.',
             confirmText: 'Clôturer',
-            variant: 'danger',
+            variant: 'closeIncident',
         });
 
         if (!confirmed) return;

@@ -6,38 +6,25 @@ import {
     Info,
     XCircle,
 } from 'lucide-react';
+import { ACTION_THEME } from '../../../config/actionTheme.js';
 
-const VARIANT_CONFIG = {
-    danger: {
-        icon: AlertTriangle,
-        iconBg: 'bg-red-100',
-        iconColor: 'text-red-600',
-        confirmBtn: 'bg-red-600 hover:bg-red-700',
-    },
-    success: {
-        icon: CheckCircle2,
-        iconBg: 'bg-green-100',
-        iconColor: 'text-green-600',
-        confirmBtn: 'bg-green-600 hover:bg-green-700',
-    },
-    warning: {
-        icon: AlertTriangle,
-        iconBg: 'bg-amber-100',
-        iconColor: 'text-amber-600',
-        confirmBtn: 'bg-amber-500 hover:bg-amber-600',
-    },
-    info: {
-        icon: Info,
-        iconBg: 'bg-blue-100',
-        iconColor: 'text-blue-600',
-        confirmBtn: 'bg-brand-600 hover:bg-brand-700',
-    },
-    error: {
-        icon: XCircle,
-        iconBg: 'bg-red-100',
-        iconColor: 'text-red-600',
-        confirmBtn: 'bg-red-600 hover:bg-red-700',
-    },
+const VARIANT_ICON = {
+    danger: AlertTriangle,
+    success: CheckCircle2,
+    warning: AlertTriangle,
+    info: Info,
+    error: XCircle,
+    acknowledge: CheckCircle2,
+    takeIncident: Info,
+    escalate: Info,
+    falsePositive: Info,
+    addNote: Info,
+    countermeasure: AlertTriangle,
+    closeIncident: CheckCircle2,
+    reassignIncident: Info,
+    returnToL1: AlertTriangle,
+    activateUser: CheckCircle2,
+    disableUser: AlertTriangle,
 };
 
 export default function ActionFeedbackModal
@@ -55,8 +42,8 @@ export default function ActionFeedbackModal
      }) {
     if (!isOpen) return null;
 
-    const config = VARIANT_CONFIG[variant] || VARIANT_CONFIG.info;
-    const Icon = config.icon;
+    const theme = ACTION_THEME[variant] || ACTION_THEME.info;
+    const Icon = VARIANT_ICON[variant] || Info;
 
     const isConfirm = mode === 'confirm';
 
@@ -64,8 +51,8 @@ export default function ActionFeedbackModal
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
             <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
                 <div className="flex flex-col items-center text-center">
-                    <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full ${config.iconBg}`}>
-                        <Icon className={`h-6 w-6 ${config.iconColor}`} />
+                    <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full ${theme.iconBg}`}>
+                        <Icon className={`h-6 w-6 ${theme.iconText}`} />
                     </div>
 
                     <h3 className="mb-2 text-lg font-bold text-gray-900">
@@ -92,7 +79,7 @@ export default function ActionFeedbackModal
                         <button
                             type="button"
                             onClick={onConfirm}
-                            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${config.confirmBtn} cursor-pointer`}
+                            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer ${theme.button}`}
                         >
                             {confirmText || 'Confirmer'}
                         </button>
@@ -101,7 +88,7 @@ export default function ActionFeedbackModal
                     <button
                         type="button"
                         onClick={onClose}
-                        className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-colors ${config.confirmBtn} cursor-pointer`}
+                        className={`w-full rounded-xl px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer ${theme.button}`}
                     >
                         D'accord
                     </button>

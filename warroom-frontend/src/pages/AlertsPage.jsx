@@ -189,7 +189,7 @@ export default function AlertsPage() {
             title: 'Acquitter cette alerte ?',
             message: 'Cette action indique que l’alerte est prise en compte par le SOC.',
             confirmText: 'Acquitter',
-            variant: 'info',
+            variant: 'acknowledge',
         });
 
         if (!confirmed) return;
