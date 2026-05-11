@@ -47,3 +47,6 @@ spring_project_by_domain.txt
 *.pyc
 __pycache__/
 venv/
+
+##
+.env
