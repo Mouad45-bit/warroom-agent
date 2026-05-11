@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/client';
+import { getL2Users } from '../api/usersApi';
 import { useAuth } from '../context/AuthContext';
 import useSSE from '../hooks/useSSE';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
@@ -100,10 +101,8 @@ export default function AlertsPage() {
                     const users = await mockGetL2Users();
                     setL2Users(users);
                 } else {
-                    const res = await api.get('/api/admin/users');
-                    setL2Users(res.data.filter(u => u.role === 'L2' && u.active).map(u => ({
-                        userId: u.userId, fullName: u.fullName,
-                    })));
+                    const users = await getL2Users();
+                    setL2Users(users);
                 }
             } catch (err) {
                 console.error('Erreur chargement L2 :', err);
