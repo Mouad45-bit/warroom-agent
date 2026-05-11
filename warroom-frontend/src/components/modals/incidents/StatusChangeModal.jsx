@@ -29,12 +29,12 @@ import IncidentStatusBadge from '../../ui/incidents/IncidentStatusBadge.jsx';
 import { ACTION_THEME } from '../../../config/actionTheme.js';
 import { appConfig } from '../../../config/appConfig.js';
 
-// Labels français pour les statuts
+// Valeurs techniques affichées pour les statuts
 const STATUS_LABELS = {
-    INVESTIGATING: 'En investigation',
-    REMEDIATING: 'En remédiation',
-    RESOLVED: 'Résolu',
-    CLOSED: 'Clôturé',
+    INVESTIGATING: 'INVESTIGATING',
+    REMEDIATING: 'REMEDIATING',
+    RESOLVED: 'RESOLVED',
+    CLOSED: 'CLOSED',
 };
 
 // Statuts considérés comme retour arrière

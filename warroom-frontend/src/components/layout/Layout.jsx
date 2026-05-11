@@ -95,7 +95,7 @@ export default function Layout() {
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-gray-900 leading-tight">Vigilix</h1>
-                        <p className="text-xs text-gray-400 leading-none">SOC Platform</p>
+                        <p className="text-xs text-gray-400 leading-none">Plateforme SOC</p>
                     </div>
                 </div>
 

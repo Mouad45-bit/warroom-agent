@@ -194,13 +194,13 @@ export default function AgentDetailModal
                             {/* Infos générales */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                                 {[
-                                    ['OS', `${agentDetail.agent.osName} ${agentDetail.agent.osVersion}`],
-                                    ['Version agent', agentDetail.agent.agentVersion],
+                                    ['Système d’exploitation', `${agentDetail.agent.osName} ${agentDetail.agent.osVersion}`],
+                                    ['Version de l’agent', agentDetail.agent.agentVersion],
                                     ['Enrôlé le', new Date(agentDetail.agent.enrolledAt).toLocaleDateString('fr-FR')],
                                     ['Dernier heartbeat', timeAgo(agentDetail.agent.lastSeenAt)],
-                                    ['Heartbeat interval', `${agentDetail.agent.heartbeatIntervalSeconds}s`],
-                                    ['Batch size', agentDetail.agent.batchSize],
-                                    ['Retry interval', `${agentDetail.agent.retryIntervalSeconds}s`],
+                                    ['Intervalle de heartbeat', `${agentDetail.agent.heartbeatIntervalSeconds}s`],
+                                    ['Taille de lot', agentDetail.agent.batchSize],
+                                    ['Intervalle de nouvelle tentative', `${agentDetail.agent.retryIntervalSeconds}s`],
                                 ].map(([label, value]) => (
                                     <div key={label} className="flex justify-between py-1.5 border-b border-gray-50">
                                         <span className="text-gray-400">{label}</span>
@@ -290,12 +290,12 @@ export default function AgentDetailModal
                                     <div className="flex gap-3 text-xs">
                                         {agentDetail.latestHealth.enrollmentRetries > 0 && (
                                             <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700">
-                                                Enrollment retries: {agentDetail.latestHealth.enrollmentRetries}
+                                                Tentatives d'enrôlement : {agentDetail.latestHealth.enrollmentRetries}
                                             </span>
                                         )}
                                         {agentDetail.latestHealth.configRefreshFailures > 0 && (
                                             <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700">
-                                                Config refresh: {agentDetail.latestHealth.configRefreshFailures}
+                                                Échecs de rafraîchissement de configuration : {agentDetail.latestHealth.configRefreshFailures}
                                             </span>
                                         )}
                                         {agentDetail.latestHealth.componentRestarts > 0 && (

@@ -97,32 +97,32 @@ const INC_STATUS = {
     OPEN: {
         bg: 'bg-green-100',
         text: 'text-green-700',
-        label: 'Ouverts',
+        label: 'OPEN',
     },
     INVESTIGATING: {
         bg: 'bg-blue-100',
         text: 'text-blue-700',
-        label: 'Investigation',
+        label: 'INVESTIGATING',
     },
     REMEDIATING: {
         bg: 'bg-orange-100',
         text: 'text-orange-700',
-        label: 'Remédiation',
+        label: 'REMEDIATING',
     },
     RESOLVED: {
         bg: 'bg-teal-100',
         text: 'text-teal-700',
-        label: 'Résolus',
+        label: 'RESOLVED',
     },
     CLOSED: {
         bg: 'bg-gray-100',
         text: 'text-gray-600',
-        label: 'Clôturés',
+        label: 'CLOSED',
     },
     CLOSED_FALSE_POSITIVE: {
         bg: 'bg-gray-100',
         text: 'text-gray-400',
-        label: 'Faux positifs',
+        label: 'CLOSED_FALSE_POSITIVE',
     },
 };
 

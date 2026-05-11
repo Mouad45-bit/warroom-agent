@@ -78,10 +78,10 @@ const agentDetails = {
             configRefreshFailures: 0,
             componentRestarts: 2,
             components: [
-                { name: 'LogCollector', status: 'RUNNING', statusMessage: 'Tailing 3 fichiers', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 0 },
+                { name: 'LogCollector', status: 'RUNNING', statusMessage: 'Lecture continue de 3 fichiers', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 0 },
                 { name: 'NetworkCollector', status: 'RUNNING', statusMessage: 'Capture sur eth0', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 1 },
-                { name: 'ProcessCollector', status: 'RUNNING', statusMessage: 'Monitoring 142 processus', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 0 },
-                { name: 'FileIntegrityCollector', status: 'RUNNING', statusMessage: 'Watching /etc, /var/log', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 1 },
+                { name: 'ProcessCollector', status: 'RUNNING', statusMessage: 'Surveillance de 142 processus', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 0 },
+                { name: 'FileIntegrityCollector', status: 'RUNNING', statusMessage: 'Surveillance de /etc, /var/log', lastStartedAt: '2026-05-09T08:00:00Z', restartCount: 1 },
             ],
         },
         heartbeatHistory: Array.from({ length: 20 }, (_, i) => ({
@@ -118,10 +118,10 @@ const agentDetails = {
             configRefreshFailures: 1,
             componentRestarts: 5,
             components: [
-                { name: 'LogCollector', status: 'RUNNING', statusMessage: 'Tailing 5 fichiers', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 0 },
+                { name: 'LogCollector', status: 'RUNNING', statusMessage: 'Lecture continue de 5 fichiers', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 0 },
                 { name: 'NetworkCollector', status: 'RUNNING', statusMessage: 'Capture sur ens192', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 2 },
-                { name: 'ProcessCollector', status: 'STOPPED', statusMessage: 'Erreur : permission denied /proc', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 3 },
-                { name: 'FileIntegrityCollector', status: 'RUNNING', statusMessage: 'Watching /etc', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 0 },
+                { name: 'ProcessCollector', status: 'STOPPED', statusMessage: 'Erreur : permission refusée sur /proc', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 3 },
+                { name: 'FileIntegrityCollector', status: 'RUNNING', statusMessage: 'Surveillance de /etc', lastStartedAt: '2026-05-09T07:00:00Z', restartCount: 0 },
             ],
         },
         heartbeatHistory: Array.from({ length: 20 }, (_, i) => ({
@@ -198,10 +198,10 @@ const agentDetails = {
             configRefreshFailures: 0,
             componentRestarts: 0,
             components: [
-                { name: 'LogCollector', status: 'RUNNING', statusMessage: 'Tailing 8 fichiers', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
+                { name: 'LogCollector', status: 'RUNNING', statusMessage: 'Lecture continue de 8 fichiers', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
                 { name: 'NetworkCollector', status: 'RUNNING', statusMessage: 'Capture sur bond0', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
-                { name: 'ProcessCollector', status: 'RUNNING', statusMessage: 'Monitoring 87 processus', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
-                { name: 'FileIntegrityCollector', status: 'RUNNING', statusMessage: 'Watching /etc, /opt', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
+                { name: 'ProcessCollector', status: 'RUNNING', statusMessage: 'Surveillance de 87 processus', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
+                { name: 'FileIntegrityCollector', status: 'RUNNING', statusMessage: 'Surveillance de /etc, /opt', lastStartedAt: '2026-05-09T06:00:00Z', restartCount: 0 },
             ],
         },
         heartbeatHistory: Array.from({ length: 20 }, (_, i) => ({

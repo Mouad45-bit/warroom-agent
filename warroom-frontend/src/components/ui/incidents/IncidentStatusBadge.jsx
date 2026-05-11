@@ -17,32 +17,32 @@
 
 const STATUS_CONFIG = {
     OPEN: {
-        label: 'Ouvert',
+        label: 'OPEN',
         classes: 'bg-green-100 text-green-700 ring-green-600/20',
         pulse: true,
     },
     INVESTIGATING: {
-        label: 'Investigation',
+        label: 'INVESTIGATING',
         classes: 'bg-blue-100 text-blue-700 ring-blue-600/20',
         pulse: false,
     },
     REMEDIATING: {
-        label: 'Remédiation',
+        label: 'REMEDIATING',
         classes: 'bg-orange-100 text-orange-700 ring-orange-600/20',
         pulse: false,
     },
     RESOLVED: {
-        label: 'Résolu',
+        label: 'RESOLVED',
         classes: 'bg-teal-100 text-teal-700 ring-teal-600/20',
         pulse: false,
     },
     CLOSED: {
-        label: 'Clôturé',
+        label: 'CLOSED',
         classes: 'bg-gray-100 text-gray-600 ring-gray-500/20',
         pulse: false,
     },
     CLOSED_FALSE_POSITIVE: {
-        label: 'Faux positif',
+        label: 'CLOSED_FALSE_POSITIVE',
         classes: 'bg-gray-100 text-gray-400 ring-gray-400/20',
         pulse: false,
     },

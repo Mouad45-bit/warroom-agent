@@ -73,7 +73,7 @@ export default function AgentConfigModal({ isOpen, onClose, onConfirm, submittin
                     </div>
                     <div>
                         <h3 className="text-lg font-bold text-gray-900">Modifier la configuration</h3>
-                        <p className="text-xs text-gray-400">Les changements seront appliqués au prochain refresh de l'agent.</p>
+                        <p className="text-xs text-gray-400">Les changements seront appliqués au prochain rafraîchissement de l'agent.</p>
                     </div>
                 </div>
 
@@ -122,7 +122,7 @@ export default function AgentConfigModal({ isOpen, onClose, onConfirm, submittin
 
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Intervalle de retry (secondes)
+                            Intervalle de nouvelle tentative (secondes)
                         </label>
                         <input
                             type="number"

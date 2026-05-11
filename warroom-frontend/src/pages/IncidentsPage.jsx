@@ -642,7 +642,7 @@ export default function IncidentsPage() {
                                                 className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
                                                     filters.status.includes(s) ? 'bg-brand-50 text-brand-600 border-brand-200' : 'text-gray-500 border-gray-200 hover:bg-gray-50'
                                                 }`}>
-                                            {s === 'CLOSED_FALSE_POSITIVE' ? 'FAUX POSITIF' : s}
+                                            {s}
                                         </button>
                                     ))}
                                 </div>

@@ -12,19 +12,19 @@
 
 const STATUS_CONFIG = {
     NEW: {
-        label: 'Nouvelle',
+        label: 'NEW',
         classes: 'bg-green-100 text-green-700 ring-green-600/20',
     },
     ACKNOWLEDGED: {
-        label: 'Acquittée',
+        label: 'ACKNOWLEDGED',
         classes: 'bg-blue-100 text-blue-700 ring-blue-600/20',
     },
     FALSE_POSITIVE: {
-        label: 'Faux positif',
+        label: 'FALSE_POSITIVE',
         classes: 'bg-gray-100 text-gray-500 ring-gray-500/20',
     },
     ESCALATED: {
-        label: 'Escaladée',
+        label: 'ESCALATED',
         classes: 'bg-purple-100 text-purple-700 ring-purple-600/20',
     },
 };
