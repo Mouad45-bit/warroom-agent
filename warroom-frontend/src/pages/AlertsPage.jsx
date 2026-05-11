@@ -11,7 +11,7 @@
 //    - Liste paginée avec tri sévérité DESC (contrat §2.1)
 //    - 7 filtres combinables côté serveur
 //    - Détail en modale centrée (contrat §2.2) → AlertDetailModal
-//    - Acquittement avec confirmation (contrat §2.3) → ConfirmModal
+//    - Acquittement avec confirmation globale (contrat §2.3)
 //    - Faux positif avec justification (contrat §2.4) → FalsePositiveModal
 //    - Alertes temps réel via SSE (contrat §2.6)
 // ══════════════════════════════════════════════════════════════
@@ -23,10 +23,10 @@ import useSSE from '../hooks/useSSE';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import AlertStatusBadge from '../components/ui/alerts/AlertStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
-import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import FalsePositiveModal from '../components/modals/alerts/FalsePositiveModal.jsx';
 import AlertDetailModal from '../components/modals/alerts/AlertDetailModal.jsx';
 import {appConfig} from '../config/appConfig.js';
+import { useActionFeedback } from '../hooks/useActionFeedback.js';
 import {
     mockGetAlerts,
     mockGetAlertDetail,
@@ -51,6 +51,8 @@ export default function AlertsPage() {
     const {user} = useAuth();
     const isL1 = user?.role === 'L1';
 
+    const { confirmAction, showSuccess, showError } = useActionFeedback();
+
     // ── Liste ────────────────────────────────────────────────
     const [alerts, setAlerts] = useState([]);
     const [page, setPage] = useState(0);
@@ -68,11 +70,6 @@ export default function AlertsPage() {
     const [detailOpen, setDetailOpen] = useState(false);
     const [alertDetail, setAlertDetail] = useState(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
-
-    // ── Modale confirmation acquittement ─────────────────────
-    const [confirmDialog, setConfirmDialog] = useState({
-        isOpen: false, alertId: null, title: '', message: '', type: 'success', confirmText: '',
-    });
 
     // ── Modale faux positif ──────────────────────────────────
     const [fpModal, setFpModal] = useState({isOpen: false, alertId: null});
@@ -187,28 +184,53 @@ export default function AlertsPage() {
     // ══════════════════════════════════════════════════════════
     //  ACQUITTER
     // ══════════════════════════════════════════════════════════
-    const requestAcknowledge = (alertId) => {
-        setConfirmDialog({
-            isOpen: true, alertId,
-            title: 'Acquitter cette alerte',
-            message: 'En acquittant, vous confirmez avoir pris connaissance de cette alerte. Cette action est irréversible.',
-            type: 'success', confirmText: 'Acquitter',
+    const requestAcknowledge = async (alertId) => {
+        const confirmed = await confirmAction({
+            title: 'Acquitter cette alerte ?',
+            message: 'Cette action indique que l’alerte est prise en compte par le SOC.',
+            confirmText: 'Acquitter',
+            variant: 'info',
         });
+
+        if (!confirmed) return;
+
+        await executeAcknowledge(alertId);
     };
 
-    const executeAcknowledge = async () => {
-        const {alertId} = confirmDialog;
-        setConfirmDialog(prev => ({...prev, isOpen: false}));
+    const executeAcknowledge = async (alertId) => {
         try {
             const result = appConfig.useMockApi
                 ? await mockAcknowledgeAlert(alertId)
                 : (await api.put(`/api/alerts/${alertId}/acknowledge`)).data;
-            setAlerts(prev => prev.map(a => a.id === alertId ? {...a, status: 'ACKNOWLEDGED', ...result} : a));
+
+            setAlerts(prev =>
+                prev.map(a =>
+                    a.id === alertId
+                        ? { ...a, status: 'ACKNOWLEDGED', ...result }
+                        : a
+                )
+            );
+
             if (alertDetail?.alert?.id === alertId) {
-                setAlertDetail(prev => ({...prev, alert: {...prev.alert, status: 'ACKNOWLEDGED', ...result}}));
+                setAlertDetail(prev => ({
+                    ...prev,
+                    alert: {
+                        ...prev.alert,
+                        status: 'ACKNOWLEDGED',
+                        ...result,
+                    },
+                }));
             }
+
+            showSuccess({
+                title: 'Alerte acquittée',
+                message: 'L’alerte a été marquée comme prise en charge.',
+            });
         } catch (err) {
-            window.alert(err.message || 'Erreur.');
+            showError({
+                title: 'Échec de l’acquittement',
+                message: err?.response?.data?.message || err.message || 'Impossible d’acquitter cette alerte.',
+            });
         }
     };
 
@@ -233,8 +255,18 @@ export default function AlertsPage() {
             } : a));
             if (alertDetail?.alert?.id === fpModal.alertId) closeDetail();
             setFpModal({isOpen: false, alertId: null});
+
+            showSuccess({
+                title: 'Alerte déclarée faux positif',
+                message: 'L’alerte a été clôturée comme faux positif.',
+            });
         } catch (err) {
             setFpError(err.message || 'Erreur.');
+
+            showError({
+                title: 'Échec de l’action',
+                message: err?.response?.data?.message || err.message || 'Impossible de déclarer cette alerte comme faux positif.',
+            });
         }
         setFpSubmitting(false);
     };
@@ -273,8 +305,18 @@ export default function AlertsPage() {
             // Fermer le détail et la modale
             closeDetail();
             setEscalateModal({isOpen: false, alert: null});
+
+            showSuccess({
+                title: 'Incident créé',
+                message: 'L’alerte a été escaladée en incident.',
+            });
         } catch (err) {
             setEscalateError(err.response?.data?.message || 'Erreur lors de l\'escalade.');
+
+            showError({
+                title: 'Échec de l’escalade',
+                message: err?.response?.data?.message || err.message || 'Impossible d’escalader cette alerte.',
+            });
         }
         setEscalateSubmitting(false);
     };
@@ -435,16 +477,6 @@ export default function AlertsPage() {
                 onAcknowledge={requestAcknowledge}
                 onFalsePositive={openFPModal}
                 onEscalate={openEscalateModal}
-            />
-
-            <ConfirmModal
-                isOpen={confirmDialog.isOpen}
-                title={confirmDialog.title}
-                message={confirmDialog.message}
-                type={confirmDialog.type}
-                confirmText={confirmDialog.confirmText}
-                onClose={() => setConfirmDialog(prev => ({...prev, isOpen: false}))}
-                onConfirm={executeAcknowledge}
             />
 
             <FalsePositiveModal

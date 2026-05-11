@@ -30,7 +30,6 @@ import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import IncidentStatusBadge from '../components/ui/incidents/IncidentStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
 import IncidentDetailModal from '../components/modals/incidents/IncidentDetailModal.jsx';
-import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import StatusChangeModal from '../components/modals/incidents/StatusChangeModal.jsx';
 import ReassignModal from '../components/modals/incidents/ReassignModal.jsx';
 import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx';
@@ -38,6 +37,7 @@ import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModa
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import CountermeasureModal from '../components/modals/incidents/CountermeasureModal.jsx';
 import {appConfig} from '../config/appConfig.js';
+import {useActionFeedback} from '../hooks/useActionFeedback.js';
 import {
     mockGetIncidents,
     mockGetIncidentDetail,
@@ -69,6 +69,7 @@ export default function IncidentsPage() {
     const isL2 = role === 'L2';
     const isL1 = role === 'L1';
     const isManager = role === 'MANAGER';
+    const {confirmAction, showSuccess, showError} = useActionFeedback();
 
     // ══════════════════════════════════════════════════════════
     //  ÉTAT DE LA LISTE
@@ -105,9 +106,6 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     //  MODALES
     // ══════════════════════════════════════════════════════════
-    const [confirmDialog, setConfirmDialog] = useState({
-        isOpen: false, title: '', message: '', type: 'success', confirmText: '',
-    });
     const [statusModal, setStatusModal] = useState({isOpen: false});
     const [reassignModal, setReassignModal] = useState({isOpen: false});
     const [returnModal, setReturnModal] = useState({isOpen: false});
@@ -217,31 +215,37 @@ export default function IncidentsPage() {
     };
 
     // ══════════════════════════════════════════════════════════
-    //  ACTION : PRENDRE EN CHARGE (via ConfirmModal)
+    //  ACTION : PRENDRE EN CHARGE
     // ══════════════════════════════════════════════════════════
-    const requestTake = () => {
-        setConfirmDialog({
-            isOpen: true,
-            title: 'Prendre en charge cet incident',
-            message: 'Vous serez assigné à cet incident et le statut passera à "En investigation". Cette action est visible par toute l\'équipe.',
-            type: 'success',
+    const requestTake = async () => {
+        const confirmed = await confirmAction({
+            title: 'Prendre en charge cet incident ?',
+            message: 'L’incident vous sera assigné et passera dans votre file de traitement.',
             confirmText: 'Prendre en charge',
+            variant: 'info',
         });
-    };
 
-    const executeTake = async () => {
-        setConfirmDialog(prev => ({...prev, isOpen: false}));
+        if (!confirmed) return;
+
         try {
             if (appConfig.useMockApi) {
                 await mockTakeIncident(selectedIncidentId, user?.userId, user?.fullName);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/take`);
             }
+
             await refreshDetail();
-            fetchIncidents();
+            await fetchIncidents();
+
+            showSuccess({
+                title: 'Incident pris en charge',
+                message: 'L’incident vous a été assigné.',
+            });
         } catch (err) {
-            const msg = err.response?.data?.message || 'Erreur lors de la prise en charge.';
-            alert(msg);
+            showError({
+                title: 'Action impossible',
+                message: err?.response?.data?.message || err.message || 'Impossible de prendre en charge cet incident.',
+            });
         }
     };
 
@@ -256,19 +260,34 @@ export default function IncidentsPage() {
     const handleStatusChange = async (newStatus, note) => {
         setModalSubmitting(true);
         setModalError(null);
+
         try {
             if (appConfig.useMockApi) {
                 await mockChangeStatus(selectedIncidentId, newStatus, note);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/status`, {newStatus, note});
             }
+
             setStatusModal({isOpen: false});
             await refreshDetail();
-            fetchIncidents();
+            await fetchIncidents();
+
+            showSuccess({
+                title: 'Statut modifié',
+                message: 'Le statut de l’incident a été mis à jour.',
+            });
         } catch (err) {
-            setModalError(err.response?.data?.message || 'Erreur lors du changement de statut.');
+            const message = err?.response?.data?.message || err.message || 'Impossible de modifier le statut.';
+
+            setModalError(message);
+
+            showError({
+                title: 'Échec du changement de statut',
+                message,
+            });
+        } finally {
+            setModalSubmitting(false);
         }
-        setModalSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -282,19 +301,34 @@ export default function IncidentsPage() {
     const handleReassign = async (newAssigneeUserId, note) => {
         setModalSubmitting(true);
         setModalError(null);
+
         try {
             if (appConfig.useMockApi) {
                 await mockReassignIncident(selectedIncidentId, newAssigneeUserId, note);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/reassign`, {newAssigneeUserId, note});
             }
+
             setReassignModal({isOpen: false});
             await refreshDetail();
-            fetchIncidents();
+            await fetchIncidents();
+
+            showSuccess({
+                title: 'Incident réassigné',
+                message: 'L’incident a été transféré au nouvel analyste.',
+            });
         } catch (err) {
-            setModalError(err.response?.data?.message || 'Erreur lors de la réassignation.');
+            const message = err?.response?.data?.message || err.message || 'Impossible de réassigner cet incident.';
+
+            setModalError(message);
+
+            showError({
+                title: 'Échec de la réassignation',
+                message,
+            });
+        } finally {
+            setModalSubmitting(false);
         }
-        setModalSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -308,19 +342,34 @@ export default function IncidentsPage() {
     const handleReturnToL1 = async (justification) => {
         setModalSubmitting(true);
         setModalError(null);
+
         try {
             if (appConfig.useMockApi) {
                 await mockReturnToL1(selectedIncidentId, justification);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/return-to-l1`, {justification});
             }
+
             setReturnModal({isOpen: false});
             await refreshDetail();
-            fetchIncidents();
+            await fetchIncidents();
+
+            showSuccess({
+                title: 'Incident renvoyé au L1',
+                message: 'L’incident a été renvoyé avec la justification fournie.',
+            });
         } catch (err) {
-            setModalError(err.response?.data?.message || 'Erreur lors du renvoi.');
+            const message = err?.response?.data?.message || err.message || 'Impossible de renvoyer cet incident au L1.';
+
+            setModalError(message);
+
+            showError({
+                title: 'Échec du renvoi',
+                message,
+            });
+        } finally {
+            setModalSubmitting(false);
         }
-        setModalSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -332,21 +381,46 @@ export default function IncidentsPage() {
     };
 
     const handleClose = async (summary) => {
-        setModalSubmitting(true);
         setModalError(null);
+
+        const confirmed = await confirmAction({
+            title: 'Clôturer cet incident ?',
+            message: 'Une fois clôturé, l’incident ne pourra plus être modifié.',
+            confirmText: 'Clôturer',
+            variant: 'danger',
+        });
+
+        if (!confirmed) return;
+
+        setModalSubmitting(true);
+
         try {
             if (appConfig.useMockApi) {
                 await mockCloseIncident(selectedIncidentId, summary);
             } else {
                 await api.put(`/api/incidents/${selectedIncidentId}/close`, {summary});
             }
+
             setCloseModal({isOpen: false});
             await refreshDetail();
-            fetchIncidents();
+            await fetchIncidents();
+
+            showSuccess({
+                title: 'Incident clôturé',
+                message: 'L’incident a été clôturé avec succès.',
+            });
         } catch (err) {
-            setModalError(err.response?.data?.message || 'Erreur lors de la clôture.');
+            const message = err?.response?.data?.message || err.message || 'Impossible de clôturer cet incident.';
+
+            setModalError(message);
+
+            showError({
+                title: 'Échec de la clôture',
+                message,
+            });
+        } finally {
+            setModalSubmitting(false);
         }
-        setModalSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -360,18 +434,33 @@ export default function IncidentsPage() {
     const handleAddNote = async (content) => {
         setModalSubmitting(true);
         setModalError(null);
+
         try {
             if (appConfig.useMockApi) {
                 await mockAddNote(selectedIncidentId, content, user?.fullName, user?.role);
             } else {
                 await api.post(`/api/incidents/${selectedIncidentId}/notes`, {content});
             }
+
             setNoteModal({isOpen: false});
             await refreshDetail();
+
+            showSuccess({
+                title: 'Note ajoutée',
+                message: 'La note a été ajoutée à la timeline de l’incident.',
+            });
         } catch (err) {
-            setModalError(err.response?.data?.message || 'Erreur lors de l\'ajout de la note.');
+            const message = err?.response?.data?.message || err.message || 'Impossible d’ajouter cette note.';
+
+            setModalError(message);
+
+            showError({
+                title: 'Échec de l’ajout',
+                message,
+            });
+        } finally {
+            setModalSubmitting(false);
         }
-        setModalSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -385,6 +474,7 @@ export default function IncidentsPage() {
     const handleAddCountermeasure = async ({type, description, technicalCommand}) => {
         setModalSubmitting(true);
         setModalError(null);
+
         try {
             let result;
             if (appConfig.useMockApi) {
@@ -398,10 +488,26 @@ export default function IncidentsPage() {
 
             setCmModal({isOpen: false});
             await refreshDetail();
+
+            showSuccess({
+                title: 'Contre-mesure ajoutée',
+                message: result?.warning
+                    ? `La contre-mesure a été ajoutée. Attention : ${result.warning}.`
+                    : 'La contre-mesure a été ajoutée à la timeline de l’incident.',
+                variant: result?.warning ? 'warning' : 'success',
+            });
         } catch (err) {
-            setModalError(err.response?.data?.message || 'Erreur lors de l\'ajout de la contre-mesure.');
+            const message = err?.response?.data?.message || err.message || 'Impossible d’ajouter cette contre-mesure.';
+
+            setModalError(message);
+
+            showError({
+                title: 'Échec de l’ajout',
+                message,
+            });
+        } finally {
+            setModalSubmitting(false);
         }
-        setModalSubmitting(false);
     };
 
     // ══════════════════════════════════════════════════════════
@@ -671,17 +777,6 @@ export default function IncidentsPage() {
             {/* ════════════════════════════════════════════════
                 MODALES
                 ════════════════════════════════════════════════ */}
-
-            {/* Prise en charge */}
-            <ConfirmModal
-                isOpen={confirmDialog.isOpen}
-                title={confirmDialog.title}
-                message={confirmDialog.message}
-                type={confirmDialog.type}
-                confirmText={confirmDialog.confirmText}
-                onClose={() => setConfirmDialog(prev => ({...prev, isOpen: false}))}
-                onConfirm={executeTake}
-            />
 
             {/* Changement de statut */}
             <StatusChangeModal

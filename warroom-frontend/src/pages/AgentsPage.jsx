@@ -10,6 +10,7 @@ import {useAuth} from '../context/AuthContext';
 import AgentConfigModal from '../components/modals/agents/AgentConfigModal.jsx';
 import AgentDetailModal from '../components/modals/agents/AgentDetailModal.jsx';
 import {appConfig} from '../config/appConfig.js';
+import {useActionFeedback} from '../hooks/useActionFeedback.js';
 import {
     mockGetAgents,
     mockGetAgentDetail,
@@ -36,6 +37,7 @@ function timeAgo(isoDate) {
 export default function AgentsPage() {
     const {user} = useAuth();
     const isAdmin = user?.role === 'ADMIN';
+    const {showSuccess, showError} = useActionFeedback();
 
     // ── Liste
     const [agents, setAgents] = useState([]);
@@ -99,30 +101,35 @@ export default function AgentsPage() {
     // ── MODIFICATION CONFIG
     const handleUpdateConfig = async (newConfig) => {
         if (!agentDetail) return;
-        setConfigSubmitting(true);
         setConfigError(null);
+        setConfigSubmitting(true);
+
         try {
             if (appConfig.useMockApi) {
                 await mockUpdateAgentConfig(agentDetail.agent.agentId, newConfig);
             } else {
                 await api.put(`/api/admin/agents/${agentDetail.agent.agentId}/config`, newConfig);
             }
-            setAgentDetail(prev => ({
-                ...prev,
-                agent: {
-                    ...prev.agent,
-                    heartbeatIntervalSeconds: newConfig.heartbeatIntervalSeconds,
-                    batchSize: newConfig.batchSize,
-                    retryIntervalSeconds: newConfig.retryIntervalSeconds,
-                    enabledCollectors: newConfig.enabledCollectors,
-                },
-            }));
+
             setConfigModal({isOpen: false});
-            fetchAgents();
+            await openDetail(agentDetail.agent.agentId);
+
+            showSuccess({
+                title: 'Configuration modifiée',
+                message: 'La configuration de l’agent a été mise à jour.',
+            });
         } catch (err) {
-            setConfigError(err.response?.data?.message || 'Erreur lors de la modification.');
+            const message = err?.response?.data?.message || err.message || 'Erreur de modification.';
+
+            setConfigError(message);
+
+            showError({
+                title: 'Échec de la modification',
+                message,
+            });
+        } finally {
+            setConfigSubmitting(false);
         }
-        setConfigSubmitting(false);
     };
 
     return (

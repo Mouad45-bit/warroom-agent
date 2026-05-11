@@ -22,8 +22,8 @@ import {useState, useEffect, useCallback} from 'react';
 import api from '../api/client';
 import {useAuth} from '../context/AuthContext';
 import CreateUserModal from '../components/modals/users/CreateUserModal.jsx';
-import ConfirmModal from "../components/modals/ConfirmModal.jsx";
 import {appConfig} from '../config/appConfig.js';
+import {useActionFeedback} from '../hooks/useActionFeedback.js';
 import {
     mockGetUsers,
     mockDisableUser,
@@ -38,22 +38,12 @@ import {
 
 export default function UsersPage() {
     const {user: currentUser} = useAuth();
+    const {confirmAction, showSuccess, showError} = useActionFeedback();
 
     // ── État ────────────────────────────────────────────────
     const [users, setUsers] = useState([]);
     const [loadingList, setLoadingList] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
-
-    // État pour la modale de confirmation
-    const [confirmDialog, setConfirmDialog] = useState({
-        isOpen: false,
-        userId: null,
-        actionType: null, // 'disable' ou 'enable'
-        title: '',
-        message: '',
-        type: 'danger', // 'danger' ou 'success'
-        confirmText: ''
-    });
 
     // ── Chargement de la liste ──────────────────────────────
     const fetchUsers = useCallback(async () => {
@@ -76,50 +66,53 @@ export default function UsersPage() {
         fetchUsers();
     }, [fetchUsers]);
 
-    // ── Préparation des actions (Ouverture de la modale) ────
-    const requestDisable = (userId) => {
-        setConfirmDialog({
-            isOpen: true,
-            userId,
-            actionType: 'disable',
-            title: 'Désactiver le compte',
-            message: 'Cet utilisateur ne pourra plus se connecter à la plateforme. Confirmez-vous cette action ?',
-            type: 'danger',
-            confirmText: 'Désactiver'
+    // ── Activation / désactivation d'un compte ──────────────
+    const requestToggleUser = async (targetUser) => {
+        const isCurrentlyActive = targetUser.active;
+        const actionLabel = isCurrentlyActive ? 'désactiver' : 'activer';
+
+        const confirmed = await confirmAction({
+            title: isCurrentlyActive
+                ? 'Désactiver cet utilisateur ?'
+                : 'Activer cet utilisateur ?',
+            message: `Voulez-vous vraiment ${actionLabel} le compte de ${targetUser.fullName} ?`,
+            confirmText: isCurrentlyActive ? 'Désactiver' : 'Activer',
+            variant: isCurrentlyActive ? 'danger' : 'success',
         });
+
+        if (!confirmed) return;
+
+        await executeToggleUser(targetUser);
     };
 
-    const requestEnable = (userId) => {
-        setConfirmDialog({
-            isOpen: true,
-            userId,
-            actionType: 'enable',
-            title: 'Activer le compte',
-            message: 'Cet utilisateur récupérera ses accès à la plateforme. Confirmez-vous cette action ?',
-            type: 'success',
-            confirmText: 'Activer'
-        });
-    };
-
-    // ── Exécution de l'action confirmée ─────────────────────
-    const executeAction = async () => {
-        const {userId, actionType} = confirmDialog;
-
-        // Fermer la modale immédiatement
-        setConfirmDialog({...confirmDialog, isOpen: false});
+    const executeToggleUser = async (targetUser) => {
+        const isCurrentlyActive = targetUser.active;
 
         try {
-            if (actionType === 'disable') {
-                if (appConfig.useMockApi) await mockDisableUser(userId);
-                else await api.put(`/api/admin/users/${userId}/disable`);
-            } else if (actionType === 'enable') {
-                if (appConfig.useMockApi) await mockEnableUser(userId);
-                else await api.put(`/api/admin/users/${userId}/enable`);
+            if (appConfig.useMockApi) {
+                if (isCurrentlyActive) {
+                    await mockDisableUser(targetUser.userId);
+                } else {
+                    await mockEnableUser(targetUser.userId);
+                }
+            } else {
+                const endpoint = isCurrentlyActive ? 'disable' : 'enable';
+                await api.put(`/api/admin/users/${targetUser.userId}/${endpoint}`);
             }
-            fetchUsers(); // Rafraîchir le tableau
+
+            await fetchUsers();
+
+            showSuccess({
+                title: isCurrentlyActive
+                    ? 'Utilisateur désactivé'
+                    : 'Utilisateur activé',
+                message: `${targetUser.fullName} a bien été ${isCurrentlyActive ? 'désactivé' : 'activé'}.`,
+            });
         } catch (err) {
-            const msg = err.response?.data?.message || 'Erreur lors de l\'action.';
-            alert(msg);
+            showError({
+                title: 'Action impossible',
+                message: err?.response?.data?.message || err.message || 'Impossible de modifier le statut de cet utilisateur.',
+            });
         }
     };
 
@@ -236,14 +229,14 @@ export default function UsersPage() {
                                         {canToggleStatus(u.role) && (
                                             u.active ? (
                                                 <button
-                                                    onClick={() => requestDisable(u.userId)}
+                                                    onClick={() => requestToggleUser(u)}
                                                     className="text-xs font-medium text-red-600 hover:text-red-700 hover:underline transition-colors cursor-pointer"
                                                 >
                                                     Désactiver
                                                 </button>
                                             ) : (
                                                 <button
-                                                    onClick={() => requestEnable(u.userId)}
+                                                    onClick={() => requestToggleUser(u)}
                                                     className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline transition-colors cursor-pointer"
                                                 >
                                                     Activer
@@ -272,17 +265,6 @@ export default function UsersPage() {
                     }}
                 />
             )}
-
-            {/* Modale de confirmation (Désactiver / Activer) */}
-            <ConfirmModal
-                isOpen={confirmDialog.isOpen}
-                title={confirmDialog.title}
-                message={confirmDialog.message}
-                type={confirmDialog.type}
-                confirmText={confirmDialog.confirmText}
-                onClose={() => setConfirmDialog({...confirmDialog, isOpen: false})}
-                onConfirm={executeAction}
-            />
         </div>
     );
 }
