@@ -24,6 +24,7 @@ import {
     mockGetAuditLog,
     mockGetAuditUsers,
 } from '../api/mock/mockAuditLog.js';
+import { appConfig } from '../config/appConfig.js';
 import Pagination from '../components/ui/Pagination.jsx';
 import {
     Loader2,
@@ -32,8 +33,8 @@ import {
     ScrollText,
 } from 'lucide-react';
 
-const USE_MOCK_API = true;
-const PAGE_SIZE = 30;
+//
+const PAGE_SIZE = appConfig.pagination.auditLogPageSize;
 
 // ══════════════════════════════════════════════════════════════
 //  MAPPING actionType → label affiché en français
@@ -93,7 +94,7 @@ export default function AuditLogPage() {
 
     // Charger les utilisateurs distincts
     useEffect(() => {
-        if (USE_MOCK_API) {
+        if (appConfig.useMockApi) {
             setAuditUsers(mockGetAuditUsers());
         } else {
             api.get('/api/admin/users').then(res => {
@@ -112,7 +113,7 @@ export default function AuditLogPage() {
     const fetchEntries = useCallback(async () => {
         setLoadingList(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetAuditLog({
                     page,
                     size: PAGE_SIZE,

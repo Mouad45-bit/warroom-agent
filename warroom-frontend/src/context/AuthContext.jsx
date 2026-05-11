@@ -19,16 +19,10 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/client'; // Ton vrai client Axios
 import { mockCheckSession, mockLogin, mockLogout } from '../api/mock/mockAuth.js'; // Le faux backend
+import { appConfig } from '../config/appConfig.js';
 
 // Création du contexte React (vide par défaut)
 const AuthContext = createContext(null);
-
-// ══════════════════════════════════════════════════════════════
-// CONFIGURATION DE L'ENVIRONNEMENT
-// true = Utilise les fausses données (pour coder l'UI)
-// false = Utilise le vrai backend Spring Boot (Production/Tests)
-// ══════════════════════════════════════════════════════════════
-const USE_MOCK_AUTH = true;
 
 // ── PROVIDER ────────────────────────────────────────────────
 // Enveloppe toute l'application dans <AuthProvider> (dans App.jsx).
@@ -50,7 +44,7 @@ export function AuthProvider({ children }) {
     // Sinon 401 → user reste null → redirection vers /login.
     const checkSession = async () => {
         try {
-            if (USE_MOCK_AUTH) {
+            if (appConfig.useMockAuth) {
                 const mockUser = await mockCheckSession();
                 setUser(mockUser);
             } else {
@@ -79,7 +73,7 @@ export function AuthProvider({ children }) {
     //   - error: message d'erreur si échec
     //   - status: code HTTP (401 = invalide, 423 = verrouillé)
     const login = async (username, password) => {
-        if (USE_MOCK_AUTH) {
+        if (appConfig.useMockAuth) {
             const result = await mockLogin(username, password);
             if (result.success) await checkSession();
             return result;
@@ -103,7 +97,7 @@ export function AuthProvider({ children }) {
     // Détruit la session côté serveur. Le cookie JSESSIONID
     // devient invalide. On remet user à null localement.
     const logout = async () => {
-        if (USE_MOCK_AUTH) {
+        if (appConfig.useMockAuth) {
             await mockLogout();
         } else {
             try {

@@ -26,6 +26,7 @@ import Pagination from '../components/ui/Pagination.jsx';
 import ConfirmModal from '../components/modals/ConfirmModal.jsx';
 import FalsePositiveModal from '../components/modals/alerts/FalsePositiveModal.jsx';
 import AlertDetailModal from '../components/modals/alerts/AlertDetailModal.jsx';
+import { appConfig } from '../config/appConfig.js';
 import {
     mockGetAlerts,
     mockGetAlertDetail,
@@ -42,8 +43,6 @@ import {
 import { Search, Filter, Loader2, RotateCcw } from 'lucide-react';
 
 //
-const USE_MOCK_API = true;
-
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const STATUSES = ['NEW', 'ACKNOWLEDGED', 'FALSE_POSITIVE', 'ESCALATED'];
 const PAGE_SIZE = 10;
@@ -95,7 +94,7 @@ export default function AlertsPage() {
     useEffect(() => {
         const loadL2Users = async () => {
             try {
-                if (USE_MOCK_API) {
+                if (appConfig.useMockApi) {
                     const users = await mockGetL2Users();
                     setL2Users(users);
                 } else {
@@ -117,7 +116,7 @@ export default function AlertsPage() {
     const fetchAlerts = useCallback(async () => {
         setLoadingList(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetAlerts({
                     page, size: PAGE_SIZE,
                     severity: filters.severity, status: filters.status,
@@ -159,7 +158,7 @@ export default function AlertsPage() {
     const loadAlertDetail = async (alertId) => {
         setLoadingDetail(true);
         try {
-            const data = USE_MOCK_API
+            const data = appConfig.useMockApi
                 ? await mockGetAlertDetail(alertId)
                 : (await api.get(`/api/alerts/${alertId}`)).data;
             setAlertDetail(data);
@@ -187,7 +186,7 @@ export default function AlertsPage() {
         const { alertId } = confirmDialog;
         setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         try {
-            const result = USE_MOCK_API
+            const result = appConfig.useMockApi
                 ? await mockAcknowledgeAlert(alertId)
                 : (await api.put(`/api/alerts/${alertId}/acknowledge`)).data;
             setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, status: 'ACKNOWLEDGED', ...result } : a));
@@ -206,7 +205,7 @@ export default function AlertsPage() {
         setFpError(null);
         setFpSubmitting(true);
         try {
-            const result = USE_MOCK_API
+            const result = appConfig.useMockApi
                 ? await mockFalsePositiveAlert(fpModal.alertId, justification)
                 : (await api.put(`/api/alerts/${fpModal.alertId}/false-positive`, { justification })).data;
             setAlerts(prev => prev.map(a => a.id === fpModal.alertId ? { ...a, status: 'FALSE_POSITIVE', ...result } : a));
@@ -229,7 +228,7 @@ export default function AlertsPage() {
         setEscalateError(null);
         setEscalateSubmitting(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 await mockCreateIncident({ title, severity, triageNote, assignedToUserId, alertIds });
             } else {
                 // Utilise l'endpoint raccourci depuis le détail d'alerte

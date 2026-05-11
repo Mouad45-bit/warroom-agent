@@ -23,20 +23,18 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import CreateUserModal from '../components/modals/users/CreateUserModal.jsx';
 import ConfirmModal from "../components/modals/ConfirmModal.jsx";
-import { mockGetUsers, mockDisableUser } from '../api/mock/mockAuth.js';
+import { appConfig } from '../config/appConfig.js';
+import {
+    mockGetUsers,
+    mockDisableUser,
+    mockEnableUser,
+} from '../api/mock/mockAuth.js';
 import {
     UserPlus,
     Loader2,
     CheckCircle2,
     ShieldOff,
 } from 'lucide-react';
-
-// ══════════════════════════════════════════════════════════════
-// ⚙️ CONFIGURATION DE L'ENVIRONNEMENT
-// true = Utilise les fausses données (pour coder l'UI)
-// false = Utilise le vrai backend Spring Boot
-// ══════════════════════════════════════════════════════════════
-const USE_MOCK_API = true;
 
 export default function UsersPage() {
     const { user: currentUser } = useAuth();
@@ -61,7 +59,7 @@ export default function UsersPage() {
     const fetchUsers = useCallback(async () => {
         setLoadingList(true);
         try {
-            if (USE_MOCK_API) {
+            if (appConfig.useMockApi) {
                 const data = await mockGetUsers();
                 setUsers(data);
             } else {
@@ -112,10 +110,10 @@ export default function UsersPage() {
 
         try {
             if (actionType === 'disable') {
-                if (USE_MOCK_API) await mockDisableUser(userId);
+                if (appConfig.useMockApi) await mockDisableUser(userId);
                 else await api.put(`/api/admin/users/${userId}/disable`);
             } else if (actionType === 'enable') {
-                if (USE_MOCK_API) await mockEnableUser(userId);
+                if (appConfig.useMockApi) await mockEnableUser(userId);
                 else await api.put(`/api/admin/users/${userId}/enable`);
             }
             fetchUsers(); // Rafraîchir le tableau
