@@ -4,8 +4,619 @@ PROJET : C:\Users\marwa\warroom-agent\server
 ========================================================================================================================
 
 ########################################################################################################################
+GROUPE : MAIN CLASS
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\ServerApplication.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@Slf4j
+@SpringBootApplication
+@EnableScheduling
+public class ServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ServerApplication.class, args);
+        System.out.println("[Server] WarRoom SOC Backend started on port 8080 !");
+    }
+}
+
+########################################################################################################################
 GROUPE : WARROOM/CONTROLLER
 ########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AdminController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.AgentConfigDto;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.repository.AgentRepository;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.AuditService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/admin/agents")
+@PreAuthorize("hasRole('ADMIN')")
+public class AdminController {
+
+    private final AgentRepository agentRepository;
+    private final UserRepository userRepository;
+    private final AuditService auditService;
+
+    public AdminController(AgentRepository agentRepository,
+                           UserRepository userRepository,
+                           AuditService auditService) {
+        this.agentRepository = agentRepository;
+        this.userRepository = userRepository;
+        this.auditService = auditService;
+    }
+
+    @PutMapping("/{agentId}/config")
+    public ResponseEntity<?> updateAgentConfig(@PathVariable("agentId") String agentId,
+                                               @RequestBody AgentConfigDto newConfig,
+                                               Authentication auth) {
+        return agentRepository.findById(agentId).map(agent -> {
+            // Construire le diff pour l'audit
+            String diff = String.format("heartbeat=%d→%d, batch=%d→%d, retry=%d→%d, collectors=%s→%s",
+                    agent.getHeartbeatIntervalSeconds(), newConfig.heartbeatIntervalSeconds(),
+                    agent.getBatchSize(), newConfig.batchSize(),
+                    agent.getRetryIntervalSeconds(), newConfig.retryIntervalSeconds(),
+                    agent.getEnabledCollectors(), newConfig.enabledCollectors());
+
+            agent.setHeartbeatIntervalSeconds(newConfig.heartbeatIntervalSeconds());
+            agent.setBatchSize(newConfig.batchSize());
+            agent.setRetryIntervalSeconds(newConfig.retryIntervalSeconds());
+            agent.setEnabledCollectors(newConfig.enabledCollectors());
+
+            agentRepository.save(agent);
+            log.info("Configuration mise à jour pour l'agent {}", agentId);
+
+            // *** MODULE 6 — AUDIT AGENT_CONFIG_CHANGED ***
+            User admin = userRepository.findByUsername(auth.getName()).orElse(null);
+            if (admin != null) {
+                auditService.log(admin.getId(), admin.getFullName(), admin.getRole().name(),
+                        AuditAction.AGENT_CONFIG_CHANGED, AuditTargetType.AGENT,
+                        agentId, agent.getHostname(), diff);
+            }
+
+            return ResponseEntity.ok().build();
+        }).orElse(ResponseEntity.notFound().build());
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AdminUserController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.CreateUserRequest;
+import com.warroom.server.dto.UserResponse;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.Role;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.AdminUserService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/admin/users")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+public class AdminUserController {
+
+    private final AdminUserService adminUserService;
+    private final UserRepository userRepository;
+
+    public AdminUserController(AdminUserService adminUserService, UserRepository userRepository) {
+        this.adminUserService = adminUserService;
+        this.userRepository = userRepository;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<UserResponse>> getAllUsers() {
+        return ResponseEntity.ok(adminUserService.getAllUsers());
+    }
+
+    @PostMapping
+    public ResponseEntity<?> createUser(@RequestBody CreateUserRequest request, Authentication authentication) {
+        try {
+            Role currentUserRole = extractRole(authentication);
+            User admin = extractUser(authentication);
+
+            UserResponse response = adminUserService.createUser(request, currentUserRole,
+                    admin.getId(), admin.getFullName(), admin.getRole().name());
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage().contains("déjà pris")) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+            }
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{userId}/disable")
+    public ResponseEntity<?> disableUser(@PathVariable("userId") Long userId, Authentication authentication) {
+        try {
+            Role currentUserRole = extractRole(authentication);
+            String currentUsername = authentication.getName();
+            User admin = extractUser(authentication);
+
+            adminUserService.disableUser(userId, currentUsername, currentUserRole,
+                    admin.getId(), admin.getFullName(), admin.getRole().name());
+            return ResponseEntity.ok(Map.of("message", "Compte désactivé avec succès."));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{userId}/enable")
+    public ResponseEntity<?> enableUser(@PathVariable("userId") Long userId, Authentication authentication) {
+        try {
+            Role currentUserRole = extractRole(authentication);
+            User admin = extractUser(authentication); // On extrait l'admin qui fait l'action
+
+            // Appel avec les infos d'audit
+            adminUserService.enableUser(userId, currentUserRole,
+                    admin.getId(), admin.getFullName(), admin.getRole().name());
+
+            return ResponseEntity.ok(Map.of("message", "Compte réactivé avec succès."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    private Role extractRole(Authentication authentication) {
+        String roleString = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(auth -> auth.startsWith("ROLE_"))
+                .map(auth -> auth.replace("ROLE_", ""))
+                .findFirst()
+                .orElse("L1");
+        return Role.valueOf(roleString);
+    }
+
+    private User extractUser(Authentication authentication) {
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalStateException("Utilisateur introuvable"));
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AgentController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.*;
+import com.warroom.server.service.AgentService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/agents")
+public class AgentController {
+
+    private final AgentService agentService;
+
+    // NOUVEAU : On injecte le secret depuis le fichier de configuration.
+    // Si la valeur n'est pas dans le fichier, on met une sécurité par défaut.
+    @Value("${warroom.enrollment.secret:super-secret-default-key}")
+    private String enrollmentSecret;
+
+    public AgentController(AgentService agentService) {
+        this.agentService = agentService;
+    }
+
+    //
+    @PostMapping("/enroll")
+    public ResponseEntity<?> enroll(
+            @RequestHeader(value = "X-Enrollment-Secret", required = false) String providedSecret,
+            @RequestBody EnrollmentRequest request) {
+
+        // NOUVEAU : Vérification stricte du secret partagé
+        if (providedSecret == null || !providedSecret.equals(enrollmentSecret)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Accès refusé : Secret d'enrôlement manquant ou invalide.");
+        }
+
+        EnrollmentResponse response = agentService.enrollAgent(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{agentId}/config")
+    public ResponseEntity<AgentConfigDto> getConfig(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        AgentConfigDto config = agentService.getActiveConfig(agentId);
+        return ResponseEntity.status(HttpStatus.OK).body(config);
+    }
+
+    //
+    @PostMapping("/{agentId}/heartbeat")
+    public ResponseEntity<Void> receiveHeartbeat(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody AgentHealthSnapshotDto snapshot) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        agentService.processHeartbeat(agentId, snapshot);
+        return ResponseEntity.status(HttpStatus.OK).build();
+    }
+
+    //
+    @PostMapping("/{agentId}/events")
+    public ResponseEntity<Void> receiveEvents(
+            @PathVariable("agentId") String agentId,
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody List<EnvelopedEventDto> events) {
+
+        if (!agentService.isAuthorized(agentId, authHeader)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        agentService.processEvents(agentId, events);
+
+        return ResponseEntity.status(HttpStatus.OK).build();
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AlertController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.CreateIncidentRequest;
+import com.warroom.server.dto.EscalateAlertRequest;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import com.warroom.server.repository.IncidentRepository;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.AlertService;
+import com.warroom.server.service.IncidentService;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/alerts")
+@PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER')")
+public class AlertController {
+
+    private final AlertService alertService;
+    private final UserRepository userRepository;
+    private final IncidentService incidentService;
+
+    public AlertController(AlertService alertService, UserRepository userRepository , IncidentService incidentService) {
+        this.alertService = alertService;
+        this.userRepository = userRepository;
+        this.incidentService = incidentService;
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/alerts — Liste paginée avec filtres
+    // -----------------------------------------------------------------
+
+    @GetMapping
+    public ResponseEntity<Page<AlertRecord>> getAlerts(
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size,
+            @RequestParam(value = "severity", required = false) List<Severity> severity,
+            @RequestParam(value = "status", required = false) List<AlertStatus> status,
+            @RequestParam(value = "agentId", required = false) String agentId,
+            @RequestParam(value = "from", required = false) Instant from,
+            @RequestParam(value = "to", required = false) Instant to) {
+
+        return ResponseEntity.ok(
+                alertService.getAlerts(page, size, severity, status, agentId, from, to)
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/alerts/{alertId} — Détail complet
+    // -----------------------------------------------------------------
+
+    @GetMapping("/{alertId}")
+    public ResponseEntity<?> getAlertDetail(@PathVariable("alertId") Long alertId) {
+        try {
+            return ResponseEntity.ok(alertService.getAlertDetail(alertId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/alerts/{alertId}/acknowledge — Acquitter (L1 seul)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{alertId}/acknowledge")
+    @PreAuthorize("hasRole('L1')")
+    public ResponseEntity<?> acknowledge(@PathVariable("alertId") Long alertId, Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            AlertRecord updated = alertService.acknowledge(alertId, userId);
+
+            return ResponseEntity.ok(Map.of(
+                    "id", updated.getId(),
+                    "status", updated.getStatus().name(),
+                    "qualifiedAt", updated.getQualifiedAt().toString()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/alerts/{alertId}/false-positive — Faux positif (L1 seul)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{alertId}/false-positive")
+    @PreAuthorize("hasRole('L1')")
+    public ResponseEntity<?> falsePositive(@PathVariable("alertId") Long alertId,
+                                           @RequestBody Map<String, String> body,
+                                           Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            String justification = body.get("justification");
+
+            AlertRecord updated = alertService.markFalsePositive(alertId, userId, justification);
+
+            return ResponseEntity.ok(Map.of(
+                    "id", updated.getId(),
+                    "status", updated.getStatus().name(),
+                    "qualifiedAt", updated.getQualifiedAt().toString(),
+                    "justification", updated.getJustification()
+            ));
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage().contains("justification")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", e.getMessage()));
+            }
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/alerts/{alertId}/escalate — Escalader en incident (L1)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{alertId}/escalate")
+    @PreAuthorize("hasRole('L1')")
+    public ResponseEntity<?> escalateToIncident(@PathVariable("alertId") Long alertId,
+                                                @RequestBody EscalateAlertRequest request,
+                                                Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+
+            // Construire la liste complète des alertIds
+            List<Long> allAlertIds = new ArrayList<>();
+            allAlertIds.add(alertId);
+            if (request.additionalAlertIds() != null) {
+                allAlertIds.addAll(request.additionalAlertIds());
+            }
+
+            // Créer l'incident via IncidentService
+            CreateIncidentRequest incidentRequest = new CreateIncidentRequest(
+                    request.title(),
+                    request.severity(),
+                    request.triageNote(),
+                    request.assignedToUserId(),
+                    allAlertIds
+            );
+
+            Map<String, Object> incident = incidentService.createIncident(incidentRequest, userId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(incident);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Utilitaire : extraire l'ID utilisateur depuis la session
+    // -----------------------------------------------------------------
+
+    private Long extractUserId(Authentication auth) {
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new IllegalStateException("Utilisateur introuvable"));
+        return user.getId();
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AuditLogController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.entity.AuditLogEntry;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.service.AuditService;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/admin/audit-log")
+@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+public class AuditLogController {
+
+    private final AuditService auditService;
+
+    public AuditLogController(AuditService auditService) {
+        this.auditService = auditService;
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<AuditLogEntry>> getAuditLog(
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "30") int size,
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "actionType", required = false) List<AuditAction> actionType,
+            @RequestParam(value = "targetType", required = false) AuditTargetType targetType,
+            @RequestParam(value = "from", required = false) Instant from,
+            @RequestParam(value = "to", required = false) Instant to) {
+
+        return ResponseEntity.ok(
+                auditService.getAuditLog(page, size, userId, actionType, targetType, from, to)
+        );
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\AuthController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.LoginRequest;
+import com.warroom.server.dto.UserResponse;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.AuditService;
+import com.warroom.server.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private final AuthService authService;
+    private final UserRepository userRepository;
+    private final AuditService auditService;
+
+    public AuthController(AuthService authService, UserRepository userRepository , AuditService auditService) {
+        this.authService = authService;
+        this.userRepository = userRepository;
+        this.auditService = auditService;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        try {
+            UserResponse response = authService.authenticateUser(request, httpRequest, httpResponse);
+            return ResponseEntity.ok(response);
+
+        } catch (LockedException e) {
+            return ResponseEntity.status(423).body(Map.of("message", "Compte temporairement verrouillé. Réessayez dans 15 minutes."));
+
+        } catch (BadCredentialsException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Identifiants invalides."));
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpServletRequest request, Authentication auth) { // AJOUTE Authentication
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            userRepository.findByUsername(auth.getName()).ifPresent(user -> {
+                auditService.log(user.getId(), user.getFullName(), user.getRole().name(),
+                        AuditAction.LOGOUT, AuditTargetType.SESSION,
+                        request.getSession().getId(), "Session Web", "Déconnexion réussie");
+            });
+        }
+        SecurityContextHolder.clearContext();
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
+        return ResponseEntity.ok(Map.of("message", "Déconnexion réussie."));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Pas de session active."));
+        }
+
+        return userRepository.findByUsername(authentication.getName())
+                .map(user -> ResponseEntity.ok(new UserResponse(
+                        user.getId(),
+                        user.getUsername(),
+                        user.getFullName(),
+                        user.getRole().name(),
+                        user.getEmail(),
+                        user.isActive(),
+                        user.getCreatedAt(),
+                        user.getLastLoginAt()
+                )))
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+    }
+}
 
 ------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\controller\DashboardController.java
@@ -135,9 +746,1071 @@ public class DashboardController {
     }
 }
 
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\IncidentController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.AddCountermeasureRequest;
+import com.warroom.server.dto.AddNoteRequest;
+import com.warroom.server.dto.CreateIncidentRequest;
+import com.warroom.server.dto.EscalateAlertRequest;
+import com.warroom.server.entity.Incident;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.IncidentStatus;
+import com.warroom.server.model.Role;
+import com.warroom.server.model.Severity;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.IncidentService;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/incidents")
+@PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER')")
+public class IncidentController {
+
+    private final IncidentService incidentService;
+    private final UserRepository userRepository;
+
+    public IncidentController(IncidentService incidentService, UserRepository userRepository) {
+        this.incidentService = incidentService;
+        this.userRepository = userRepository;
+    }
+
+    // -----------------------------------------------------------------
+    // POST /api/incidents — Créer un incident (L1)
+    // -----------------------------------------------------------------
+
+    @PostMapping
+    @PreAuthorize("hasRole('L1')")
+    public ResponseEntity<?> createIncident(@RequestBody CreateIncidentRequest request, Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            Map<String, Object> incident = incidentService.createIncident(request, userId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(incident);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/incidents — Liste paginée
+    // -----------------------------------------------------------------
+
+    @GetMapping
+    public ResponseEntity<Page<Incident>> getIncidents(
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size,
+            @RequestParam(value = "status", required = false) List<IncidentStatus> status,
+            @RequestParam(value = "severity", required = false) List<Severity> severity,
+            @RequestParam(value = "assignedTo", required = false) Long assignedTo,
+            Authentication auth) {
+
+        Long userId = extractUserId(auth);
+        Role role = extractRole(auth);
+
+        return ResponseEntity.ok(
+                incidentService.getIncidents(page, size, status, severity, assignedTo, userId, role)
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/incidents/{incidentId} — Détail complet
+    // -----------------------------------------------------------------
+
+    @GetMapping("/{incidentId}")
+    public ResponseEntity<?> getIncidentDetail(@PathVariable("incidentId") Long incidentId) {
+        try {
+            return ResponseEntity.ok(incidentService.getIncidentDetail(incidentId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/incidents/{incidentId}/take — Prendre en charge (L2)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{incidentId}/take")
+    @PreAuthorize("hasRole('L2')")
+    public ResponseEntity<?> takeIncident(@PathVariable("incidentId") Long incidentId, Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            incidentService.takeIncident(incidentId, userId);
+            return ResponseEntity.ok(Map.of("message", "Incident pris en charge", "status", "INVESTIGATING"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/incidents/{incidentId}/status — Changer le statut (L2 assigné)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{incidentId}/status")
+    @PreAuthorize("hasRole('L2')")
+    public ResponseEntity<?> changeStatus(@PathVariable("incidentId") Long incidentId,
+                                          @RequestBody Map<String, String> body,
+                                          Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            String newStatusStr = body.get("newStatus");
+            String note = body.get("note");
+
+            if (newStatusStr == null || newStatusStr.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Le champ newStatus est obligatoire"));
+            }
+
+            IncidentStatus newStatus;
+            try {
+                newStatus = IncidentStatus.valueOf(newStatusStr.toUpperCase());
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Statut invalide : " + newStatusStr));
+            }
+
+            incidentService.changeStatus(incidentId, newStatus, note, userId);
+            return ResponseEntity.ok(Map.of("message", "Statut mis à jour", "newStatus", newStatus.name()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/incidents/{incidentId}/reassign — Réassigner (MANAGER)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{incidentId}/reassign")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<?> reassign(@PathVariable("incidentId") Long incidentId,
+                                      @RequestBody Map<String, Object> body,
+                                      Authentication auth) {
+        try {
+            Long managerUserId = extractUserId(auth);
+            Long newAssigneeUserId = Long.valueOf(body.get("newAssigneeUserId").toString());
+            String note = (String) body.get("note");
+
+            incidentService.reassign(incidentId, newAssigneeUserId, note, managerUserId);
+            return ResponseEntity.ok(Map.of("message", "Incident réassigné avec succès"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/incidents/{incidentId}/return-to-l1 — Renvoyer au L1 (L2 assigné)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{incidentId}/return-to-l1")
+    @PreAuthorize("hasRole('L2')")
+    public ResponseEntity<?> returnToL1(@PathVariable("incidentId") Long incidentId,
+                                        @RequestBody Map<String, String> body,
+                                        Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            String justification = body.get("justification");
+
+            incidentService.returnToL1(incidentId, justification, userId);
+            return ResponseEntity.ok(Map.of("message", "Incident renvoyé au L1 comme faux positif"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // PUT /api/incidents/{incidentId}/close — Clôturer (L2 assigné)
+    // -----------------------------------------------------------------
+
+    @PutMapping("/{incidentId}/close")
+    @PreAuthorize("hasRole('L2')")
+    public ResponseEntity<?> closeIncident(@PathVariable("incidentId") Long incidentId,
+                                           @RequestBody Map<String, String> body,
+                                           Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            String summary = body.get("summary");
+
+            incidentService.closeIncident(incidentId, summary, userId);
+            return ResponseEntity.ok(Map.of("message", "Incident clôturé avec succès"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+// POST /api/incidents/{incidentId}/countermeasures — Ajouter une contre-mesure (L2)
+// -----------------------------------------------------------------
+
+    @PostMapping("/{incidentId}/countermeasures")
+    @PreAuthorize("hasRole('L2')")
+    public ResponseEntity<?> addCountermeasure(@PathVariable("incidentId") Long incidentId,
+                                               @RequestBody AddCountermeasureRequest request,
+                                               Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            Map<String, Object> response = incidentService.addCountermeasure(incidentId, request, userId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+// -----------------------------------------------------------------
+// POST /api/incidents/{incidentId}/notes — Ajouter une note (L2, L1, Manager)
+// -----------------------------------------------------------------
+
+    @PostMapping("/{incidentId}/notes")
+    @PreAuthorize("hasAnyRole('L1', 'L2', 'MANAGER')")
+    public ResponseEntity<?> addNote(@PathVariable("incidentId") Long incidentId,
+                                     @RequestBody AddNoteRequest request,
+                                     Authentication auth) {
+        try {
+            Long userId = extractUserId(auth);
+            Role role = extractRole(auth);
+            Map<String, Object> response = incidentService.addNote(incidentId, request.content(), userId, role);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Utilitaires
+    // -----------------------------------------------------------------
+
+    private Long extractUserId(Authentication auth) {
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new IllegalStateException("Utilisateur introuvable"));
+        return user.getId();
+    }
+
+    private Role extractRole(Authentication auth) {
+        String roleString = auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(a -> a.startsWith("ROLE_"))
+                .map(a -> a.replace("ROLE_", ""))
+                .findFirst()
+                .orElse("L1");
+        return Role.valueOf(roleString);
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\controller\SupervisionController.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.controller;
+
+import com.warroom.server.dto.AgentDetailResponse;
+import com.warroom.server.dto.AgentSummaryDto;
+import com.warroom.server.service.SupervisionService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/supervision/agents")
+@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+public class SupervisionController {
+
+    private final SupervisionService supervisionService;
+
+    public SupervisionController(SupervisionService supervisionService) {
+        this.supervisionService = supervisionService;
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/supervision/agents — Liste le parc informatique (statut dynamique)
+    // -----------------------------------------------------------------
+    @GetMapping
+    public ResponseEntity<List<AgentSummaryDto>> getAllAgents() {
+        return ResponseEntity.ok(supervisionService.getAllAgentsSummary());
+    }
+
+    // -----------------------------------------------------------------
+    // GET /api/supervision/agents/{agentId} — Détail complet exigé par le contrat
+    // -----------------------------------------------------------------
+    @GetMapping("/{agentId}")
+    public ResponseEntity<?> getAgentDetail(@PathVariable("agentId") String agentId) {
+        try {
+            AgentDetailResponse detail = supervisionService.getAgentDetail(agentId);
+            return ResponseEntity.ok(detail);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+}
+
 ########################################################################################################################
 GROUPE : WARROOM/SERVICE
 ########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\AdminUserService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.dto.CreateUserRequest;
+import com.warroom.server.dto.UserResponse;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.model.Role;
+import com.warroom.server.repository.UserRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class AdminUserService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final SessionRegistry sessionRegistry;
+    private final AuditService auditService;
+
+    public AdminUserService(UserRepository userRepository,
+                            PasswordEncoder passwordEncoder,
+                            SessionRegistry sessionRegistry,
+                            AuditService auditService) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.sessionRegistry = sessionRegistry;
+        this.auditService = auditService;
+    }
+
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+
+
+    /**
+     * Version avec contexte d'audit (appelée depuis le controller avec userId de l'admin).
+     */
+    @Transactional
+    public UserResponse createUser(CreateUserRequest request, Role currentUserRole,
+                                   Long adminUserId, String adminFullName, String adminRole) {
+        if (userRepository.existsByUsername(request.username())) {
+            throw new IllegalArgumentException("Ce nom d'utilisateur est déjà pris.");
+        }
+
+        Role targetRole;
+        try {
+            targetRole = Role.valueOf(request.role().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Rôle invalide. Les rôles autorisés sont : L1, L2, MANAGER, ADMIN.");
+        }
+
+        if (currentUserRole == Role.MANAGER && (targetRole == Role.ADMIN || targetRole == Role.MANAGER)) {
+            throw new AccessDeniedException("Vous ne pouvez créer que des comptes L1 et L2.");
+        }
+
+        User user = new User();
+        user.setUsername(request.username());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setFullName(request.fullName());
+        user.setRole(targetRole);
+        user.setEmail(request.email());
+        user.setActive(true);
+        user.setFailedAttempts(0);
+
+        User savedUser = userRepository.save(user);
+        log.info("Nouvel utilisateur créé : {} par un {}", savedUser.getUsername(), currentUserRole);
+
+        // *** MODULE 6 — AUDIT USER_CREATED ***
+        if (adminUserId != null) {
+            auditService.log(adminUserId, adminFullName, adminRole,
+                    AuditAction.USER_CREATED, AuditTargetType.USER,
+                    savedUser.getId().toString(), savedUser.getUsername(), "Rôle : " + targetRole);
+        }
+
+        return mapToResponse(savedUser);
+    }
+
+    @Transactional
+    public void disableUser(Long userId, String currentUsername, Role currentUserRole) {
+        disableUser(userId, currentUsername, currentUserRole, null, null, null);
+    }
+
+    /**
+     * Version avec contexte d'audit.
+     */
+    @Transactional
+    public void disableUser(Long userId, String currentUsername, Role currentUserRole,
+                            Long adminUserId, String adminFullName, String adminRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Utilisateur introuvable."));
+
+        if (user.getUsername().equals(currentUsername)) {
+            throw new AccessDeniedException("Vous ne pouvez pas désactiver votre propre compte.");
+        }
+
+        if (currentUserRole == Role.MANAGER && (user.getRole() == Role.ADMIN || user.getRole() == Role.MANAGER)) {
+            throw new AccessDeniedException("Vous ne pouvez désactiver que des comptes L1 et L2.");
+        }
+
+        if (user.getRole() == Role.ADMIN) {
+            long adminCount = userRepository.countByRoleAndActiveTrue(Role.ADMIN);
+            if (adminCount <= 1) {
+                throw new AccessDeniedException("Impossible : c'est le dernier compte administrateur actif.");
+            }
+        }
+
+        user.setActive(false);
+        userRepository.save(user);
+
+        sessionRegistry.getAllPrincipals().stream()
+                .filter(principal -> principal instanceof org.springframework.security.core.userdetails.User)
+                .map(principal -> (org.springframework.security.core.userdetails.User) principal)
+                .filter(principal -> principal.getUsername().equals(user.getUsername()))
+                .forEach(principal -> {
+                    List<SessionInformation> sessions = sessionRegistry.getAllSessions(principal, false);
+                    for (SessionInformation session : sessions) {
+                        session.expireNow();
+                    }
+                });
+
+        log.warn("Compte désactivé et sessions tuées pour : {}", user.getUsername());
+
+        // *** MODULE 6 — AUDIT USER_DISABLED ***
+        if (adminUserId != null) {
+            auditService.log(adminUserId, adminFullName, adminRole,
+                    AuditAction.USER_DISABLED, AuditTargetType.USER,
+                    userId.toString(), user.getUsername(), null);
+        }
+
+
+
+
+
+    }
+
+    // NOUVEAU : Méthode de base (sans audit direct si besoin interne)
+    @Transactional
+    public void enableUser(Long userId, Role currentUserRole) {
+        enableUser(userId, currentUserRole, null, null, null);
+    }
+
+    // NOUVEAU : La vraie méthode avec le contexte d'audit
+    @Transactional
+    public void enableUser(Long userId, Role currentUserRole,
+                           Long adminUserId, String adminFullName, String adminRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Utilisateur introuvable."));
+
+        if (currentUserRole == Role.MANAGER && (user.getRole() == Role.ADMIN || user.getRole() == Role.MANAGER)) {
+            throw new AccessDeniedException("Vous ne pouvez réactiver que des comptes L1 et L2.");
+        }
+
+        user.setActive(true);
+        user.setFailedAttempts(0);
+        user.setLockTime(null);
+        userRepository.save(user);
+
+        log.info("Compte réactivé : {}", user.getUsername());
+
+        // *** MODULE 6 — AUDIT USER_ENABLED ***
+        if (adminUserId != null) {
+            auditService.log(adminUserId, adminFullName, adminRole,
+                    AuditAction.USER_ENABLED, AuditTargetType.USER,
+                    userId.toString(), user.getUsername(), null);
+        }
+    }
+
+    private UserResponse mapToResponse(User user) {
+        return new UserResponse(
+                user.getId(), user.getUsername(), user.getFullName(),
+                user.getRole().name(), user.getEmail(), user.isActive(),
+                user.getCreatedAt(), user.getLastLoginAt()
+        );
+    }
+}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\AgentService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warroom.server.dto.*;
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.AgentHealthRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.repository.AgentHealthRecordRepository;
+import com.warroom.server.repository.AgentRepository;
+import com.warroom.server.repository.SecurityEventRepository;
+import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+@Slf4j
+@Service
+public class AgentService {
+
+    private final AgentRepository agentRepository;
+    private final SecurityEventRepository eventRepository;
+    private final AgentHealthRecordRepository healthRepository;
+    private final EventAnalysisService eventAnalysisService;
+    private final ObjectMapper objectMapper;
+
+    public AgentService(AgentRepository agentRepository,
+                        SecurityEventRepository eventRepository,
+                        AgentHealthRecordRepository healthRepository,
+                        EventAnalysisService eventAnalysisService) {
+        this.agentRepository = agentRepository;
+        this.eventRepository = eventRepository;
+        this.healthRepository = healthRepository;
+        this.eventAnalysisService = eventAnalysisService;
+        this.objectMapper = new ObjectMapper();
+    }
+
+    // -------------------------------------------------------------------------
+    // ENROLLMENT
+    // -------------------------------------------------------------------------
+
+    public EnrollmentResponse enrollAgent(EnrollmentRequest request) {
+        String agentId = "agt-" + UUID.randomUUID().toString().substring(0, 8);
+        String apiKey  = UUID.randomUUID().toString();
+
+        Agent agent = new Agent();
+        agent.setAgentId(agentId);
+        agent.setApiKey(apiKey);
+        agent.setHostname(request.hostname());
+        agent.setOsName(request.osName());
+        agent.setOsVersion(request.osVersion());
+        agent.setAgentVersion(request.agentVersion());
+        agent.setEnrolledAt(Instant.now());
+        agent.setLastSeenAt(Instant.now());
+
+        agentRepository.save(agent);
+
+        System.out.println("[Server] New agent enlisted : " + agentId
+                + " (" + request.hostname() + ")");
+
+        return new EnrollmentResponse(agentId, apiKey);
+    }
+
+    // -------------------------------------------------------------------------
+    // AUTH
+    // -------------------------------------------------------------------------
+
+    public boolean isAuthorized(String agentId, String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) return false;
+
+        String providedToken = authHeader.substring(7);
+
+        return agentRepository.findById(agentId)
+                .map(a -> a.getApiKey().equals(providedToken))
+                .orElse(false);
+    }
+
+    // -------------------------------------------------------------------------
+    // CONFIG
+    // -------------------------------------------------------------------------
+
+    public AgentConfigDto getActiveConfig(String agentId) {
+        // On cherche l'agent dans la base de données
+        Agent agent = agentRepository.findById(agentId).orElseThrow(() ->
+                new IllegalArgumentException("Agent inconnu : " + agentId)
+        );
+
+        // On retourne SA configuration personnelle
+        return new AgentConfigDto(
+                agent.getHeartbeatIntervalSeconds(),
+                agent.getBatchSize(),
+                agent.getRetryIntervalSeconds(),
+                agent.getEnabledCollectors()
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // HEARTBEAT
+    // -------------------------------------------------------------------------
+    @Transactional
+    public void processHeartbeat(String agentId, AgentHealthSnapshotDto snapshot) {
+        agentRepository.findById(agentId).ifPresent(agent -> {
+            // 1. Mise à jour lastSeenAt
+            agent.setLastSeenAt(Instant.now());
+            agentRepository.save(agent);
+
+            // 2. Persistance du snapshot
+            AgentHealthRecord record = new AgentHealthRecord();
+            record.setAgent(agent);
+            record.setTimestamp(Instant.now());
+            record.setRunning(snapshot.running());
+
+            // On mappe les nouvelles colonnes numériques
+            record.setQueuedEvents(snapshot.queuedEvents());
+            record.setDeliveredEvents(snapshot.deliveredEvents());
+            record.setFailedBatches(snapshot.failedBatches());
+            record.setDroppedEvents(snapshot.droppedEvents());
+            record.setEnrollmentRetries(snapshot.enrollmentRetries());
+            record.setConfigRefreshFailures(snapshot.configRefreshFailures());
+            record.setComponentRestarts(snapshot.componentRestarts());
+
+            if (snapshot.componentHealth() != null) {
+                try {
+                    //transforme la liste Java en texte JSON propre
+                    String jsonArray = objectMapper.writeValueAsString(snapshot.componentHealth());
+                    record.setSnapshotData(jsonArray);
+                } catch (Exception e) {
+                    System.err.println("[Server] Erreur de sérialisation JSON : " + e.getMessage());
+                    record.setSnapshotData("[]");
+                }
+            } else {
+                record.setSnapshotData("[]");
+            }
+
+            healthRepository.save(record);
+        });
+
+        System.out.println("[Server] Heartbeat from " + agentId
+                + " | running=" + snapshot.running()
+                + " | queued=" + snapshot.queuedEvents());
+    }
+
+    // -------------------------------------------------------------------------
+    // EVENTS
+    // -------------------------------------------------------------------------
+    @Transactional
+    public void processEvents(String agentId, List<EnvelopedEventDto> events) {
+        if (events == null || events.isEmpty()) return;
+
+        // Récupérer l'Agent une seule fois (nécessaire pour la relation @ManyToOne)
+        Agent agent = agentRepository.findById(agentId).orElse(null);
+        if (agent == null) {
+            System.err.println("[Server] Agent inconnu : " + agentId + " — batch ignoré");
+            return;
+        }
+
+        for (EnvelopedEventDto dto : events) {
+            // 1. Mapper le DTO → entité
+            SecurityEvent event = new SecurityEvent();
+            event.setAgent(agent);
+            event.setSourceType(dto.sourceType());
+            event.setCollectedAt(dto.collectedAt());
+            event.setReceivedAt(Instant.now());
+            event.setPayload(dto.payload());
+
+            // 2. Persister l'événement brut
+            SecurityEvent saved = eventRepository.save(event);
+
+            // 3. Analyser → génère et persiste les alertes si nécessaire
+            eventAnalysisService.analyze(saved);
+        }
+
+        System.out.println("[Server] Persisted " + events.size()
+                + " event(s) from " + agentId);
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\AlertService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.model.Severity;
+import com.warroom.server.repository.AlertRecordRepository;
+import com.warroom.server.repository.SecurityEventRepository;
+import com.warroom.server.repository.UserRepository;
+import com.warroom.server.specification.AlertSpecifications;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+public class AlertService {
+
+    private final AlertRecordRepository alertRepository;
+    private final SecurityEventRepository eventRepository;
+    private final UserRepository userRepository;
+    private final AuditService auditService;
+
+    public AlertService(AlertRecordRepository alertRepository,
+                        SecurityEventRepository eventRepository,
+                        UserRepository userRepository,
+                        AuditService auditService) {
+        this.alertRepository = alertRepository;
+        this.eventRepository = eventRepository;
+        this.userRepository = userRepository;
+        this.auditService = auditService;
+    }
+
+    public Page<AlertRecord> getAlerts(int page, int size,
+                                       List<Severity> severities,
+                                       List<AlertStatus> statuses,
+                                       String agentId,
+                                       Instant from, Instant to) {
+
+        Specification<AlertRecord> spec = Specification.where(null);
+
+        Specification<AlertRecord> sevSpec = AlertSpecifications.hasSeverityIn(severities);
+        if (sevSpec != null) spec = spec.and(sevSpec);
+
+        Specification<AlertRecord> statSpec = AlertSpecifications.hasStatusIn(statuses);
+        if (statSpec != null) spec = spec.and(statSpec);
+
+        Specification<AlertRecord> agentSpec = AlertSpecifications.hasAgentId(agentId);
+        if (agentSpec != null) spec = spec.and(agentSpec);
+
+        Specification<AlertRecord> fromSpec = AlertSpecifications.createdAfter(from);
+        if (fromSpec != null) spec = spec.and(fromSpec);
+
+        Specification<AlertRecord> toSpec = AlertSpecifications.createdBefore(to);
+        if (toSpec != null) spec = spec.and(toSpec);
+
+        Sort sort = Sort.by(Sort.Order.desc("severity"), Sort.Order.desc("createdAt"));
+        return alertRepository.findAll(spec, PageRequest.of(page, size, sort));
+    }
+
+    public Map<String, Object> getAlertDetail(Long alertId) {
+        AlertRecord alert = alertRepository.findById(alertId)
+                .orElseThrow(() -> new IllegalArgumentException("Alerte introuvable"));
+
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("alert", alert);
+
+        if (alert.getEventId() != null) {
+            eventRepository.findById(alert.getEventId())
+                    .ifPresent(event -> detail.put("sourceEvent", event));
+        }
+
+        detail.put("agent", alert.getAgent());
+
+        List<AlertRecord> recentAlerts = alertRepository
+                .findTop10ByAgent_AgentIdOrderByCreatedAtDesc(alert.getAgent().getAgentId());
+        detail.put("recentAlerts", recentAlerts);
+
+        return detail;
+    }
+
+    @Transactional
+    public AlertRecord acknowledge(Long alertId, Long userId) {
+        AlertRecord alert = alertRepository.findById(alertId)
+                .orElseThrow(() -> new IllegalArgumentException("Alerte introuvable"));
+
+        if (alert.getStatus() != AlertStatus.NEW) {
+            throw new IllegalStateException("Cette alerte a déjà été traitée");
+        }
+
+        alert.setStatus(AlertStatus.ACKNOWLEDGED);
+        alert.setQualifiedByUserId(userId);
+        alert.setQualifiedAt(Instant.now());
+
+        log.info("Alerte {} acquittée par userId={}", alertId, userId);
+
+        // *** MODULE 6 — AUDIT ALERT_ACKNOWLEDGED ***
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            auditService.log(userId, user.getFullName(), user.getRole().name(),
+                    AuditAction.ALERT_ACKNOWLEDGED, AuditTargetType.ALERT,
+                    alertId.toString(), alert.getRuleId(), null);
+        }
+
+        return alertRepository.save(alert);
+    }
+
+    @Transactional
+    public AlertRecord markFalsePositive(Long alertId, Long userId, String justification) {
+        if (justification == null || justification.isBlank()) {
+            throw new IllegalArgumentException("Une justification est obligatoire pour qualifier un faux positif");
+        }
+
+        AlertRecord alert = alertRepository.findById(alertId)
+                .orElseThrow(() -> new IllegalArgumentException("Alerte introuvable"));
+
+        if (alert.getStatus() == AlertStatus.ESCALATED) {
+            throw new IllegalStateException("Cette alerte a déjà été escaladée en incident");
+        }
+
+        if (alert.getStatus() == AlertStatus.FALSE_POSITIVE) {
+            throw new IllegalStateException("Cette alerte est déjà qualifiée en faux positif");
+        }
+
+        alert.setStatus(AlertStatus.FALSE_POSITIVE);
+        alert.setQualifiedByUserId(userId);
+        alert.setQualifiedAt(Instant.now());
+        alert.setJustification(justification);
+
+        log.info("Alerte {} qualifiée faux positif par userId={}", alertId, userId);
+
+        // *** MODULE 6 — AUDIT ALERT_FALSE_POSITIVE ***
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            auditService.log(userId, user.getFullName(), user.getRole().name(),
+                    AuditAction.ALERT_FALSE_POSITIVE, AuditTargetType.ALERT,
+                    alertId.toString(), alert.getRuleId(), justification);
+        }
+
+        return alertRepository.save(alert);
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\AuditService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.entity.AuditLogEntry;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.repository.AuditLogRepository;
+import com.warroom.server.specification.AuditLogSpecifications;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.List;
+
+@Slf4j
+@Service
+public class AuditService {
+
+    private final AuditLogRepository auditLogRepository;
+
+    public AuditService(AuditLogRepository auditLogRepository) {
+        this.auditLogRepository = auditLogRepository;
+    }
+
+    /**
+     * Méthode centrale — appelée depuis tous les services.
+     */
+    public void log(Long userId, String userFullName, String userRole,
+                    AuditAction action, AuditTargetType targetType,
+                    String targetId, String targetLabel, String details) {
+        AuditLogEntry entry = new AuditLogEntry();
+        entry.setUserId(userId);
+        entry.setUserFullName(userFullName);
+        entry.setUserRole(userRole);
+        entry.setActionType(action);
+        entry.setTargetType(targetType);
+        entry.setTargetId(targetId);
+        entry.setTargetLabel(targetLabel);
+        entry.setDetails(details);
+        auditLogRepository.save(entry);
+    }
+
+    /**
+     * Lecture paginée avec filtres dynamiques.
+     * GET /api/admin/audit-log
+     */
+    public Page<AuditLogEntry> getAuditLog(int page, int size,
+                                           Long userId,
+                                           List<AuditAction> actionTypes,
+                                           AuditTargetType targetType,
+                                           Instant from, Instant to) {
+
+        Specification<AuditLogEntry> spec = Specification.where(null);
+
+        Specification<AuditLogEntry> userSpec = AuditLogSpecifications.hasUserId(userId);
+        if (userSpec != null) spec = spec.and(userSpec);
+
+        Specification<AuditLogEntry> actionSpec = AuditLogSpecifications.hasActionTypeIn(actionTypes);
+        if (actionSpec != null) spec = spec.and(actionSpec);
+
+        Specification<AuditLogEntry> targetSpec = AuditLogSpecifications.hasTargetType(targetType);
+        if (targetSpec != null) spec = spec.and(targetSpec);
+
+        Specification<AuditLogEntry> fromSpec = AuditLogSpecifications.createdAfter(from);
+        if (fromSpec != null) spec = spec.and(fromSpec);
+
+        Specification<AuditLogEntry> toSpec = AuditLogSpecifications.createdBefore(to);
+        if (toSpec != null) spec = spec.and(toSpec);
+
+        Sort sort = Sort.by(Sort.Order.desc("createdAt"));
+        return auditLogRepository.findAll(spec, PageRequest.of(page, size, sort));
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\AuthService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.dto.LoginRequest;
+import com.warroom.server.dto.UserResponse;
+import com.warroom.server.entity.User;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import com.warroom.server.repository.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+
+@Slf4j
+@Service
+public class AuthService {
+
+    private final AuthenticationManager authenticationManager;
+    private final UserRepository userRepository;
+    private final SessionRegistry sessionRegistry;
+    private final AuditService auditService;
+
+    public AuthService(AuthenticationManager authenticationManager, UserRepository userRepository , SessionRegistry sessionRegistry, AuditService auditService ) {
+        this.authenticationManager = authenticationManager;
+        this.userRepository = userRepository;
+        this.sessionRegistry = sessionRegistry;
+        this.auditService = auditService;
+
+    }
+
+    @Transactional(noRollbackFor = BadCredentialsException.class)
+    public UserResponse authenticateUser(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.username(), request.password())
+            );
+
+            /*SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
+
+            HttpSession session = httpRequest.getSession(true);
+            session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+
+            User user = userRepository.findByUsername(request.username()).orElseThrow();*/
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
+
+            HttpSession session = httpRequest.getSession(true);
+            session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+
+            // 4. LIGNE CRUCIALE : On inscrit manuellement cette nouvelle session dans le registre !
+            sessionRegistry.registerNewSession(session.getId(), authentication.getPrincipal());
+
+            User user = userRepository.findByUsername(request.username()).orElseThrow();
+            user.setFailedAttempts(0);
+            user.setLockTime(null);
+            user.setLastLoginAt(Instant.now());
+            userRepository.save(user);
+
+            log.info("Connexion réussie pour l'utilisateur : {}", user.getUsername());
+
+            auditService.log(user.getId(), user.getFullName(), user.getRole().name(),
+                    AuditAction.LOGIN, AuditTargetType.SESSION,
+                    session.getId(), "Session Web", "Connexion réussie");
+
+            // Remplacement de LoginResponse par UserResponse (Option A)
+            return new UserResponse(
+                    user.getId(),
+                    user.getUsername(),
+                    user.getFullName(),
+                    user.getRole().name(),
+                    user.getEmail(),
+                    user.isActive(),
+                    user.getCreatedAt(),
+                    user.getLastLoginAt()
+            );
+
+        } catch (LockedException e) {
+            log.warn("Tentative de connexion sur un compte verrouillé : {}", request.username());
+            throw e;
+
+        } catch (BadCredentialsException e) {
+            handleFailedLoginAttempt(request.username());
+            throw e;
+        }
+    }
+
+    private void handleFailedLoginAttempt(String username) {
+        userRepository.findByUsername(username).ifPresent(user -> {
+            if (!user.isActive()) return;
+
+            // CORRECTION DU BUG : Si le verrouillage précédent a expiré, on reset d'abord
+            if (user.getLockTime() != null && user.getLockTime().plusSeconds(900).isBefore(Instant.now())) {
+                user.setFailedAttempts(0);
+                user.setLockTime(null);
+            }
+
+            user.setFailedAttempts(user.getFailedAttempts() + 1);
+
+            if (user.getFailedAttempts() >= 5) {
+                user.setLockTime(Instant.now());
+                log.error("COMPTE VERROUILLÉ (Anti-Bruteforce) : {}", username);
+            }
+
+            userRepository.save(user);
+        });
+    }
+}
 
 ------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\service\DashboardService.java
@@ -369,6 +2042,610 @@ public class DashboardService {
 }
 
 ------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\EventAnalysisService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.repository.AlertRecordRepository;
+import com.warroom.server.repository.SecurityEventRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+
+@Slf4j
+@Service
+public class EventAnalysisService {
+
+    // La clé est le sourceType, la valeur est une LISTE d'analyseurs abonnés à ce type
+    private final Map<String, List<EventAnalyzer>> analyzers;
+    private final AlertRecordRepository alertRepository;
+    private final SseNotificationService sseService;
+
+    public EventAnalysisService(List<EventAnalyzer> analyzerList,
+                                AlertRecordRepository alertRepository, SseNotificationService sseService) {
+
+        // groupingBy regroupe tous les analyseurs qui ont le même sourceType dans une List
+        this.analyzers = analyzerList.stream()
+                .collect(Collectors.groupingBy(EventAnalyzer::supportedSourceType));
+
+        this.alertRepository = alertRepository;
+        this.sseService = sseService;
+    }
+
+    @Transactional
+    public void analyze(SecurityEvent event) {
+        // On récupère la liste des analyseurs pour ce type (ou une liste vide si aucun n'existe)
+        List<EventAnalyzer> matchedAnalyzers = analyzers.getOrDefault(event.getSourceType(), Collections.emptyList());
+
+        for (EventAnalyzer analyzer : matchedAnalyzers) {
+            List<AlertRecord> alerts = analyzer.analyze(event);
+            if (!alerts.isEmpty()) {
+                alertRepository.saveAll(alerts);
+
+                // Optionnel : Affichage console pour le debug
+                for (AlertRecord alert : alerts) {
+                    System.err.println(" ALERTE [" + alert.getSeverity() + "] : " + alert.getMessage());
+                    sseService.broadcast(alert);
+                }
+            }
+        }
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\IncidentService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.dto.AddCountermeasureRequest;
+import com.warroom.server.dto.CreateIncidentRequest;
+import com.warroom.server.entity.*;
+import com.warroom.server.model.*;
+import com.warroom.server.repository.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class IncidentService {
+
+    private final IncidentRepository incidentRepository;
+    private final IncidentAlertRepository incidentAlertRepository;
+    private final IncidentTimelineRepository timelineRepository;
+    private final AlertRecordRepository alertRepository;
+    private final UserRepository userRepository;
+    private final AuditService auditService;
+
+    private static final Set<String> VALID_COUNTERMEASURE_TYPES = Set.of(
+            "BLOCK_IP", "DISABLE_ACCOUNT", "ISOLATE_MACHINE", "APPLY_PATCH",
+            "RESTART_SERVICE", "FIREWALL_RULE", "OTHER"
+    );
+
+    public IncidentService(IncidentRepository incidentRepository,
+                           IncidentAlertRepository incidentAlertRepository,
+                           IncidentTimelineRepository timelineRepository,
+                           AlertRecordRepository alertRepository,
+                           UserRepository userRepository,
+                           AuditService auditService) {
+        this.incidentRepository = incidentRepository;
+        this.incidentAlertRepository = incidentAlertRepository;
+        this.timelineRepository = timelineRepository;
+        this.alertRepository = alertRepository;
+        this.userRepository = userRepository;
+        this.auditService = auditService;
+    }
+
+    // =================================================================
+    // CRÉER UN INCIDENT
+    // =================================================================
+
+    @Transactional
+    public Map<String, Object> createIncident(CreateIncidentRequest request, Long creatorUserId) {
+        if (request.triageNote() == null || request.triageNote().isBlank()) {
+            throw new IllegalArgumentException("La note de triage est obligatoire");
+        }
+        if (request.alertIds() == null || request.alertIds().isEmpty()) {
+            throw new IllegalArgumentException("Au moins une alerte doit être associée");
+        }
+
+        for (Long alertId : request.alertIds()) {
+            AlertRecord alert = alertRepository.findById(alertId)
+                    .orElseThrow(() -> new IllegalArgumentException("Alerte " + alertId + " introuvable"));
+            if (alert.getStatus() == AlertStatus.ESCALATED) {
+                throw new IllegalStateException("L'alerte " + alertId + " est déjà escaladée");
+            }
+        }
+
+        long count = incidentRepository.count();
+        String incidentNumber = String.format("INC-%04d", count + 1);
+
+        Severity severity;
+        try {
+            severity = Severity.valueOf(request.severity().toUpperCase());
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Sévérité invalide : " + request.severity());
+        }
+
+        Incident incident = new Incident();
+        incident.setIncidentNumber(incidentNumber);
+        incident.setTitle(request.title());
+        incident.setSeverity(severity);
+        incident.setStatus(IncidentStatus.OPEN);
+        incident.setAssignedToUserId(request.assignedToUserId());
+        incident.setCreatedByUserId(creatorUserId);
+        incident.setTriageNote(request.triageNote());
+
+        Incident saved = incidentRepository.save(incident);
+
+        for (Long alertId : request.alertIds()) {
+            incidentAlertRepository.save(new IncidentAlert(saved.getId(), alertId));
+            AlertRecord alert = alertRepository.findById(alertId).orElseThrow();
+            alert.setStatus(AlertStatus.ESCALATED);
+            alert.setIncidentId(saved.getId());
+            alert.setQualifiedByUserId(creatorUserId);
+            alert.setQualifiedAt(Instant.now());
+            alertRepository.save(alert);
+        }
+
+        User creator = userRepository.findById(creatorUserId).orElseThrow();
+        addTimelineEntry(saved.getId(), TimelineEntryType.STATUS_CHANGE, creator,
+                "Incident créé — " + request.triageNote(), null, IncidentStatus.OPEN);
+
+        // *** MODULE 6 — AUDIT INCIDENT_CREATED + ALERT_ESCALATED ***
+        auditService.log(creatorUserId, creator.getFullName(), creator.getRole().name(),
+                AuditAction.INCIDENT_CREATED, AuditTargetType.INCIDENT,
+                saved.getId().toString(), incidentNumber, request.triageNote());
+
+        for (Long alertId : request.alertIds()) {
+            auditService.log(creatorUserId, creator.getFullName(), creator.getRole().name(),
+                    AuditAction.ALERT_ESCALATED, AuditTargetType.ALERT,
+                    alertId.toString(), incidentNumber, null);
+        }
+
+        log.info("Incident {} créé par {} avec {} alerte(s)", incidentNumber, creator.getUsername(), request.alertIds().size());
+        return buildIncidentResponse(saved);
+    }
+
+    // =================================================================
+    // LISTER LES INCIDENTS
+    // =================================================================
+
+    public Page<Incident> getIncidents(int page, int size,
+                                       List<IncidentStatus> statuses, List<Severity> severities,
+                                       Long assignedTo, Long currentUserId, Role currentRole) {
+        Sort sort = Sort.by(Sort.Order.desc("severity"), Sort.Order.desc("createdAt"));
+        PageRequest pageRequest = PageRequest.of(page, size, sort);
+
+        if (currentRole == Role.L2 && assignedTo == null) {
+            return incidentRepository.findByAssignedToUserId(currentUserId, pageRequest);
+        }
+        if (currentRole == Role.L1) {
+            return incidentRepository.findByCreatedByUserId(currentUserId, pageRequest);
+        }
+        if (assignedTo != null) {
+            return incidentRepository.findByAssignedToUserId(assignedTo, pageRequest);
+        }
+        if (statuses != null && !statuses.isEmpty()) {
+            return incidentRepository.findByStatusIn(statuses, pageRequest);
+        }
+        return incidentRepository.findAll(pageRequest);
+    }
+
+    // =================================================================
+    // DÉTAIL D'UN INCIDENT
+    // =================================================================
+
+    public Map<String, Object> getIncidentDetail(Long incidentId) {
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("incident", buildIncidentResponse(incident));
+
+        List<IncidentAlert> links = incidentAlertRepository.findByIncidentId(incidentId);
+        List<Long> alertIds = links.stream().map(IncidentAlert::getAlertId).collect(Collectors.toList());
+        List<AlertRecord> alerts = alertRepository.findAllById(alertIds);
+        detail.put("alerts", alerts);
+
+        List<IncidentTimelineEntry> timeline = timelineRepository.findByIncidentIdOrderByCreatedAtAsc(incidentId);
+        detail.put("timeline", timeline);
+
+        return detail;
+    }
+
+    // =================================================================
+    // PRENDRE EN CHARGE
+    // =================================================================
+
+    @Transactional
+    public void takeIncident(Long incidentId, Long l2UserId) {
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        if (incident.getAssignedToUserId() != null) {
+            User assignee = userRepository.findById(incident.getAssignedToUserId()).orElse(null);
+            String name = assignee != null ? assignee.getFullName() : "inconnu";
+            throw new IllegalStateException("Cet incident a déjà été pris en charge par " + name);
+        }
+
+        incident.setAssignedToUserId(l2UserId);
+        incident.setStatus(IncidentStatus.INVESTIGATING);
+        incidentRepository.save(incident);
+
+        User l2 = userRepository.findById(l2UserId).orElseThrow();
+        addTimelineEntry(incidentId, TimelineEntryType.STATUS_CHANGE, l2,
+                "Prise en charge par " + l2.getFullName(),
+                IncidentStatus.OPEN, IncidentStatus.INVESTIGATING);
+
+        // *** MODULE 6 — AUDIT INCIDENT_TAKEN ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_TAKEN, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), null);
+
+        log.info("Incident {} pris en charge par {}", incident.getIncidentNumber(), l2.getUsername());
+    }
+
+    // =================================================================
+    // CHANGER LE STATUT
+    // =================================================================
+
+    @Transactional
+    public void changeStatus(Long incidentId, IncidentStatus newStatus, String note, Long l2UserId) {
+        if (note == null || note.isBlank()) {
+            throw new IllegalArgumentException("Une note justificative est obligatoire pour changer le statut");
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
+            throw new AccessDeniedException("Seul le L2 assigné peut modifier le statut de cet incident");
+        }
+
+        IncidentStatus oldStatus = incident.getStatus();
+        if (!IncidentStatusMachine.isAllowed(oldStatus, newStatus)) {
+            throw new IllegalArgumentException(IncidentStatusMachine.errorMessage(oldStatus, newStatus));
+        }
+
+        incident.setStatus(newStatus);
+        incidentRepository.save(incident);
+
+        User l2 = userRepository.findById(l2UserId).orElseThrow();
+        addTimelineEntry(incidentId, TimelineEntryType.STATUS_CHANGE, l2, note, oldStatus, newStatus);
+
+        // *** MODULE 6 — AUDIT INCIDENT_STATUS_CHANGED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_STATUS_CHANGED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(),
+                oldStatus + " → " + newStatus);
+
+        log.info("Incident {} : {} → {} par {}", incident.getIncidentNumber(), oldStatus, newStatus, l2.getUsername());
+    }
+
+    // =================================================================
+    // RÉASSIGNER
+    // =================================================================
+
+    @Transactional
+    public void reassign(Long incidentId, Long newAssigneeUserId, String note, Long managerUserId) {
+        if (note == null || note.isBlank()) {
+            throw new IllegalArgumentException("Une note est obligatoire pour la réassignation");
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        User newAssignee = userRepository.findById(newAssigneeUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Utilisateur cible introuvable"));
+
+        if (newAssignee.getRole() != Role.L2) {
+            throw new IllegalArgumentException("L'incident ne peut être assigné qu'à un analyste L2");
+        }
+
+        incident.setAssignedToUserId(newAssigneeUserId);
+        incidentRepository.save(incident);
+
+        User manager = userRepository.findById(managerUserId).orElseThrow();
+        addTimelineEntry(incidentId, TimelineEntryType.REASSIGNMENT, manager,
+                "Réassigné à " + newAssignee.getFullName() + " — " + note, null, null);
+
+        // *** MODULE 6 — AUDIT INCIDENT_REASSIGNED ***
+        auditService.log(managerUserId, manager.getFullName(), manager.getRole().name(),
+                AuditAction.INCIDENT_REASSIGNED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(),
+                "→ " + newAssignee.getFullName());
+
+        log.info("Incident {} réassigné à {} par {}", incident.getIncidentNumber(), newAssignee.getUsername(), manager.getUsername());
+    }
+
+    // =================================================================
+    // RENVOYER AU L1
+    // =================================================================
+
+    @Transactional
+    public void returnToL1(Long incidentId, String justification, Long l2UserId) {
+        if (justification == null || justification.isBlank()) {
+            throw new IllegalArgumentException("Une justification est obligatoire pour le renvoi au L1");
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
+            throw new AccessDeniedException("Seul le L2 assigné peut renvoyer cet incident");
+        }
+
+        incident.setStatus(IncidentStatus.CLOSED_FALSE_POSITIVE);
+        incidentRepository.save(incident);
+
+        List<IncidentAlert> links = incidentAlertRepository.findByIncidentId(incidentId);
+        for (IncidentAlert link : links) {
+            alertRepository.findById(link.getAlertId()).ifPresent(alert -> {
+                alert.setStatus(AlertStatus.FALSE_POSITIVE);
+                alert.setJustification(justification);
+                alertRepository.save(alert);
+            });
+        }
+
+        User l2 = userRepository.findById(l2UserId).orElseThrow();
+        addTimelineEntry(incidentId, TimelineEntryType.CLOSURE, l2,
+                "Renvoyé au L1 (faux positif) — " + justification,
+                incident.getStatus(), IncidentStatus.CLOSED_FALSE_POSITIVE);
+
+        // *** MODULE 6 — AUDIT INCIDENT_RETURNED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_RETURNED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), justification);
+
+        log.info("Incident {} renvoyé au L1 par {}", incident.getIncidentNumber(), l2.getUsername());
+    }
+
+    // =================================================================
+    // CLÔTURER
+    // =================================================================
+
+    @Transactional
+    public void closeIncident(Long incidentId, String summary, Long l2UserId) {
+        if (summary == null || summary.isBlank()) {
+            throw new IllegalArgumentException("Un résumé de clôture est obligatoire");
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
+            throw new AccessDeniedException("Seul le L2 assigné peut clôturer cet incident");
+        }
+
+        if (incident.getStatus() != IncidentStatus.RESOLVED) {
+            throw new IllegalArgumentException("Seul un incident en statut RESOLVED peut être clôturé");
+        }
+
+        incident.setStatus(IncidentStatus.CLOSED);
+        incidentRepository.save(incident);
+
+        User l2 = userRepository.findById(l2UserId).orElseThrow();
+        addTimelineEntry(incidentId, TimelineEntryType.CLOSURE, l2,
+                "Incident clôturé — " + summary,
+                IncidentStatus.RESOLVED, IncidentStatus.CLOSED);
+
+        // *** MODULE 6 — AUDIT INCIDENT_CLOSED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_CLOSED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), summary);
+
+        log.info("Incident {} clôturé par {}", incident.getIncidentNumber(), l2.getUsername());
+    }
+
+    // =================================================================
+    // AJOUTER UNE CONTRE-MESURE
+    // =================================================================
+
+    @Transactional
+    public Map<String, Object> addCountermeasure(Long incidentId, AddCountermeasureRequest request, Long l2UserId) {
+        if (request.description() == null || request.description().isBlank()) {
+            throw new IllegalArgumentException("La description est obligatoire");
+        }
+        if (request.type() == null || !VALID_COUNTERMEASURE_TYPES.contains(request.type().toUpperCase())) {
+            throw new IllegalArgumentException("Type de contre-mesure invalide. Valeurs autorisées : " + VALID_COUNTERMEASURE_TYPES);
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.CLOSED_FALSE_POSITIVE) {
+            throw new IllegalArgumentException("Impossible d'ajouter une contre-mesure sur un incident clôturé");
+        }
+
+        if (incident.getAssignedToUserId() == null || !incident.getAssignedToUserId().equals(l2UserId)) {
+            throw new AccessDeniedException("Seul le L2 assigné peut ajouter une contre-mesure");
+        }
+
+        User l2 = userRepository.findById(l2UserId).orElseThrow();
+
+        IncidentTimelineEntry entry = new IncidentTimelineEntry();
+        entry.setIncidentId(incidentId);
+        entry.setEntryType(TimelineEntryType.COUNTERMEASURE);
+        entry.setAuthorUserId(l2.getId());
+        entry.setAuthorFullName(l2.getFullName());
+        entry.setAuthorRole(l2.getRole().name());
+        entry.setContent(request.description());
+        entry.setCountermeasureType(request.type().toUpperCase());
+        entry.setTechnicalCommand(request.technicalCommand());
+
+        IncidentTimelineEntry saved = timelineRepository.save(entry);
+
+        // *** MODULE 6 — AUDIT INCIDENT_COUNTERMEASURE_ADDED ***
+        auditService.log(l2UserId, l2.getFullName(), l2.getRole().name(),
+                AuditAction.INCIDENT_COUNTERMEASURE_ADDED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), request.type());
+
+        log.info("Contre-mesure {} ajoutée sur incident {} par {}", request.type(), incident.getIncidentNumber(), l2.getUsername());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", saved.getId());
+        response.put("message", "Contre-mesure ajoutée");
+        response.put("warning", incident.getStatus() != IncidentStatus.REMEDIATING
+                ? "L'incident n'est pas en phase de remédiation" : null);
+        return response;
+    }
+
+    // =================================================================
+    // AJOUTER UNE NOTE
+    // =================================================================
+
+    @Transactional
+    public Map<String, Object> addNote(Long incidentId, String content, Long userId, Role userRole) {
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("Le contenu de la note est obligatoire");
+        }
+
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident introuvable"));
+
+        if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.CLOSED_FALSE_POSITIVE) {
+            throw new IllegalArgumentException("Impossible d'ajouter une note sur un incident clôturé");
+        }
+
+        boolean isAssignedL2 = incident.getAssignedToUserId() != null && incident.getAssignedToUserId().equals(userId);
+        boolean isCreatorL1 = incident.getCreatedByUserId().equals(userId);
+        boolean isManager = userRole == Role.MANAGER;
+
+        if (!isAssignedL2 && !isCreatorL1 && !isManager) {
+            throw new AccessDeniedException("Vous n'avez pas le droit d'ajouter une note sur cet incident");
+        }
+
+        User author = userRepository.findById(userId).orElseThrow();
+
+        IncidentTimelineEntry entry = new IncidentTimelineEntry();
+        entry.setIncidentId(incidentId);
+        entry.setEntryType(TimelineEntryType.NOTE);
+        entry.setAuthorUserId(author.getId());
+        entry.setAuthorFullName(author.getFullName());
+        entry.setAuthorRole(author.getRole().name());
+        entry.setContent(content);
+
+        IncidentTimelineEntry saved = timelineRepository.save(entry);
+
+        // *** MODULE 6 — AUDIT INCIDENT_NOTE_ADDED ***
+        auditService.log(userId, author.getFullName(), author.getRole().name(),
+                AuditAction.INCIDENT_NOTE_ADDED, AuditTargetType.INCIDENT,
+                incidentId.toString(), incident.getIncidentNumber(), null);
+
+        log.info("Note ajoutée sur incident {} par {} ({})", incident.getIncidentNumber(), author.getUsername(), userRole);
+        return Map.of("id", saved.getId(), "message", "Note ajoutée");
+    }
+
+    // =================================================================
+    // HELPERS
+    // =================================================================
+
+    private void addTimelineEntry(Long incidentId, TimelineEntryType type, User author,
+                                  String content, IncidentStatus oldStatus, IncidentStatus newStatus) {
+        IncidentTimelineEntry entry = new IncidentTimelineEntry();
+        entry.setIncidentId(incidentId);
+        entry.setEntryType(type);
+        entry.setAuthorUserId(author.getId());
+        entry.setAuthorFullName(author.getFullName());
+        entry.setAuthorRole(author.getRole().name());
+        entry.setContent(content);
+        entry.setOldStatus(oldStatus);
+        entry.setNewStatus(newStatus);
+        timelineRepository.save(entry);
+    }
+
+    private Map<String, Object> buildIncidentResponse(Incident incident) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", incident.getId());
+        response.put("incidentNumber", incident.getIncidentNumber());
+        response.put("title", incident.getTitle());
+        response.put("severity", incident.getSeverity().name());
+        response.put("status", incident.getStatus().name());
+        response.put("assignedToUserId", incident.getAssignedToUserId());
+        response.put("createdByUserId", incident.getCreatedByUserId());
+        response.put("triageNote", incident.getTriageNote());
+        response.put("createdAt", incident.getCreatedAt());
+        response.put("updatedAt", incident.getUpdatedAt());
+
+        if (incident.getAssignedToUserId() != null) {
+            userRepository.findById(incident.getAssignedToUserId())
+                    .ifPresent(u -> response.put("assignedToFullName", u.getFullName()));
+        }
+        userRepository.findById(incident.getCreatedByUserId())
+                .ifPresent(u -> response.put("createdByFullName", u.getFullName()));
+
+        return response;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\IncidentStatusMachine.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.warroom.server.model.IncidentStatus;
+
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Machine à états du cycle de vie d'un incident.
+ * Définit les transitions autorisées selon le cahier des charges.
+ */
+public class IncidentStatusMachine {
+
+    private IncidentStatusMachine() {} // utilitaire
+
+    private static final Map<IncidentStatus, Set<IncidentStatus>> TRANSITIONS = Map.of(
+            IncidentStatus.OPEN,          Set.of(IncidentStatus.INVESTIGATING),
+            IncidentStatus.INVESTIGATING, Set.of(IncidentStatus.REMEDIATING),
+            IncidentStatus.REMEDIATING,   Set.of(IncidentStatus.RESOLVED, IncidentStatus.INVESTIGATING),
+            IncidentStatus.RESOLVED,      Set.of(IncidentStatus.CLOSED, IncidentStatus.REMEDIATING)
+            // CLOSED et CLOSED_FALSE_POSITIVE → aucune transition possible
+    );
+
+    /**
+     * Vérifie si la transition est autorisée.
+     */
+    public static boolean isAllowed(IncidentStatus from, IncidentStatus to) {
+        Set<IncidentStatus> allowed = TRANSITIONS.get(from);
+        return allowed != null && allowed.contains(to);
+    }
+
+    /**
+     * Retourne un message d'erreur lisible pour les transitions interdites.
+     */
+    public static String errorMessage(IncidentStatus from, IncidentStatus to) {
+        if (from == IncidentStatus.CLOSED || from == IncidentStatus.CLOSED_FALSE_POSITIVE) {
+            return "Un incident clôturé ne peut plus être modifié.";
+        }
+        Set<IncidentStatus> allowed = TRANSITIONS.get(from);
+        if (allowed == null || allowed.isEmpty()) {
+            return "Aucune transition possible depuis le statut " + from;
+        }
+        return "Transition " + from + " → " + to + " interdite. Transitions autorisées : " + allowed;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\service\NotificationService.java
 ------------------------------------------------------------------------------------------------------------------------
 package com.warroom.server.service;
@@ -437,9 +2714,316 @@ public class NotificationService {
     }
 }
 
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\SseNotificationService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Slf4j
+@Service
+public class SseNotificationService {
+
+    // On utilise CopyOnWriteArrayList pour gérer les connexions simultanées sans bug
+    private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
+
+    /**
+     * Enregistre un nouveau navigateur client
+     */
+    public SseEmitter subscribe() {
+        // Timeout de 24h pour éviter les déconnexions intempestives
+        SseEmitter emitter = new SseEmitter(24 * 60 * 60 * 1000L);
+
+        this.emitters.add(emitter);
+
+        // Nettoyage automatique en cas de déconnexion ou d'erreur
+        emitter.onCompletion(() -> this.emitters.remove(emitter));
+        emitter.onTimeout(() -> this.emitters.remove(emitter));
+        emitter.onError((e) -> this.emitters.remove(emitter));
+
+        return emitter;
+    }
+
+    /**
+     * Envoie une alerte à tous les Dashboards connectés
+     */
+    public void broadcast(Object alert) {
+        List<SseEmitter> deadEmitters = new ArrayList<>();
+
+        this.emitters.forEach(emitter -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("security-alert")
+                        .data(alert));
+            } catch (IOException e) {
+                deadEmitters.add(emitter);
+            }
+        });
+
+        this.emitters.removeAll(deadEmitters);
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\service\SupervisionService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warroom.server.dto.*;
+import com.warroom.server.entity.Agent;
+import com.warroom.server.entity.AgentHealthRecord;
+import com.warroom.server.model.HealthStatus;
+import com.warroom.server.repository.AgentHealthRecordRepository;
+import com.warroom.server.repository.AgentRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class SupervisionService {
+
+    private final AgentRepository agentRepository;
+    private final AgentHealthRecordRepository healthRepository;
+    private final ObjectMapper objectMapper;
+
+    public SupervisionService(AgentRepository agentRepository, AgentHealthRecordRepository healthRepository) {
+        this.agentRepository = agentRepository;
+        this.healthRepository = healthRepository;
+        this.objectMapper = new ObjectMapper();
+    }
+
+    // --- 1. LISTE DES AGENTS (CONTRAT VALIDÉ) ---
+    public List<AgentSummaryDto> getAllAgentsSummary() {
+        return agentRepository.findAll().stream().map(agent -> {
+            HealthStatus status = calculateHealthStatus(agent.getLastSeenAt());
+
+            int activeCollectors = 0;
+            int totalCollectors = agent.getEnabledCollectors() != null ? agent.getEnabledCollectors().size() : 0;
+
+            AgentHealthRecord latestRecord = healthRepository.findFirstByAgent_AgentIdOrderByTimestampDesc(agent.getAgentId()).orElse(null);
+
+            if (latestRecord != null && latestRecord.getSnapshotData() != null && !latestRecord.getSnapshotData().equals("[]")) {
+                try {
+                    List<ComponentHealthDto> comps = objectMapper.readValue(latestRecord.getSnapshotData(), new TypeReference<>() {});
+                    activeCollectors = (int) comps.stream().filter(ComponentHealthDto::running).count();
+                    totalCollectors = Math.max(totalCollectors, comps.size());
+                } catch (Exception e) {
+                    log.error("Erreur de parsing des collecteurs pour l'agent {}", agent.getAgentId());
+                }
+            }
+
+            return new AgentSummaryDto(
+                    agent.getAgentId(), agent.getHostname(), agent.getOsName(), agent.getOsVersion(),
+                    agent.getLastSeenAt(), status, activeCollectors, totalCollectors
+            );
+        }).collect(Collectors.toList());
+    }
+
+    // --- 2. DÉTAIL D'UN AGENT (CONTRAT VALIDÉ) ---
+    public AgentDetailResponse getAgentDetail(String agentId) {
+        Agent agent = agentRepository.findById(agentId)
+                .orElseThrow(() -> new IllegalArgumentException("Agent introuvable"));
+
+        List<AgentHealthRecord> recentRecords = healthRepository.findTop20ByAgent_AgentIdOrderByTimestampDesc(agentId);
+        AgentHealthRecord latestRecord = recentRecords.isEmpty() ? null : recentRecords.get(0);
+
+        List<HeartbeatSummaryDto> heartbeatSummaries = recentRecords.stream()
+                .map(r -> new HeartbeatSummaryDto(
+                        r.getTimestamp(),
+                        r.isRunning() ? HealthStatus.GREEN : HealthStatus.RED, // Un heartbeat reçu mais avec isRunning=false est RED
+                        r.getQueuedEvents()
+                )).collect(Collectors.toList());
+
+        List<ComponentHealthDto> components = new ArrayList<>();
+        if (latestRecord != null && latestRecord.getSnapshotData() != null && !latestRecord.getSnapshotData().equals("[]")) {
+            try {
+                components = objectMapper.readValue(latestRecord.getSnapshotData(), new TypeReference<>() {});
+            } catch (Exception e) {
+                log.error("Erreur de parsing des composants", e);
+            }
+        }
+
+        // Simulé car non persistant dans la BDD actuelle, prêt pour une future évolution
+        List<String> quarantined = new ArrayList<>();
+
+        return new AgentDetailResponse(agent, latestRecord, heartbeatSummaries, components, quarantined);
+    }
+
+    // --- RÈGLE MÉTIER STRICTE DU CONTRAT ---
+    private HealthStatus calculateHealthStatus(Instant lastSeenAt) {
+        if (lastSeenAt == null) return HealthStatus.RED;
+
+        long secondsSinceLastSeen = Duration.between(lastSeenAt, Instant.now()).getSeconds();
+
+        if (secondsSinceLastSeen < 90) return HealthStatus.GREEN;
+        if (secondsSinceLastSeen <= 300) return HealthStatus.ORANGE;
+
+        return HealthStatus.RED;
+    }
+}
+
 ########################################################################################################################
 GROUPE : WARROOM/REPOSITORY
 ########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AgentHealthRecordRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.AgentHealthRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface AgentHealthRecordRepository extends JpaRepository<AgentHealthRecord, Long> {
+
+    // Pour le détail : Les 20 derniers heartbeats
+    List<AgentHealthRecord> findTop20ByAgent_AgentIdOrderByTimestampDesc(String agentId);
+
+    // Pour le résumé (liste) : Le tout dernier heartbeat pour extraire les collecteurs
+    Optional<AgentHealthRecord> findFirstByAgent_AgentIdOrderByTimestampDesc(String agentId);
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AgentRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.Agent;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface AgentRepository extends JpaRepository<Agent, String> {
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AlertRecordRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.model.AlertStatus;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface AlertRecordRepository extends JpaRepository<AlertRecord, Long> , JpaSpecificationExecutor<AlertRecord> {
+    // Alertes contextuelles : 10 dernières du même agent
+    List<AlertRecord> findTop10ByAgent_AgentIdOrderByCreatedAtDesc(String agentId);
+
+    // Compteurs pour le dashboard (Module 4)
+    long countByStatus(AlertStatus status);
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\AuditLogRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.AuditLogEntry;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface AuditLogRepository extends JpaRepository<AuditLogEntry, Long>,
+        JpaSpecificationExecutor<AuditLogEntry> {
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\IncidentAlertRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.IncidentAlert;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface IncidentAlertRepository extends JpaRepository<IncidentAlert, Long> {
+
+    List<IncidentAlert> findByIncidentId(Long incidentId);
+
+    boolean existsByAlertId(Long alertId);
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\IncidentRepository.java
+------------------------------------------------------------------------------------------------------------------------
+// === IncidentRepository.java ===
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.Incident;
+import com.warroom.server.model.IncidentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface IncidentRepository extends JpaRepository<Incident, Long> {
+
+    Optional<Incident> findByIncidentNumber(String incidentNumber);
+
+    Page<Incident> findByAssignedToUserId(Long userId, Pageable pageable);
+
+    Page<Incident> findByStatusIn(List<IncidentStatus> statuses, Pageable pageable);
+
+    Page<Incident> findByCreatedByUserId(Long userId, Pageable pageable);
+
+    // Compteur pour générer INC-0001, INC-0002, ...
+    long count();
+
+    // Compteurs pour le dashboard (Module 4)
+    long countByStatus(IncidentStatus status);
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\IncidentTimelineRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.IncidentTimelineEntry;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface IncidentTimelineRepository extends JpaRepository<IncidentTimelineEntry, Long> {
+
+    // Timeline complète d'un incident, triée chronologiquement
+    List<IncidentTimelineEntry> findByIncidentIdOrderByCreatedAtAsc(Long incidentId);
+}
 
 ------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\repository\NotificationRepository.java
@@ -465,9 +3049,395 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     long countByUserIdAndReadFalse(Long userId);
 }
 
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\SecurityEventRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.SecurityEvent;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Long> {
+    // La clé primaire est un Long (id généré automatiquement)
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\repository\UserRepository.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.repository;
+
+import com.warroom.server.entity.User;
+import com.warroom.server.model.Role; // N'oublie pas l'import
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByUsername(String username);
+
+    boolean existsByUsername(String username);
+
+    // NOUVEAU : Demande à PostgreSQL de compter directement
+    long countByRoleAndActiveTrue(Role role);
+}
+
 ########################################################################################################################
 GROUPE : WARROOM/ENTITY
 ########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\Agent.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "agents")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+public class Agent {
+
+    @Id // La clé primaire (ex: agt-a1b2c3d4)
+    private String agentId;
+
+    private String apiKey;
+    private String hostname;
+    private String osName;
+    private String osVersion;
+    private String agentVersion;
+
+    private Instant enrolledAt;
+    private Instant lastSeenAt; // Mis à jour à chaque Heartbeat
+
+    private int heartbeatIntervalSeconds = 30; // Valeur par défaut
+    private int batchSize = 100;               // Valeur par défaut
+    private int retryIntervalSeconds = 10;     // Valeur par défaut
+
+    // @ElementCollection crée automatiquement une table de liaison "agent_enabled_collectors"
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "agent_enabled_collectors", joinColumns = @JoinColumn(name = "agent_id"))
+    @Column(name = "collector_name")
+    private List<String> enabledCollectors = new ArrayList<>(List.of(
+            "LogCollector",
+            "NetworkCollector",
+            "ProcessCollector",
+            "FileIntegrityCollector"));
+
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\AgentHealthRecord.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "agent_health_records")
+public class AgentHealthRecord {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_id", nullable = false)
+    private Agent agent;
+
+    private Instant timestamp;
+    private boolean isRunning;
+
+    // --- NOUVELLES MÉTRIQUES (Pour les graphiques du Dashboard) ---
+    private long queuedEvents;
+    private long deliveredEvents;
+    private long failedBatches;
+    private long droppedEvents;
+    private long enrollmentRetries;
+    private long configRefreshFailures;
+    private long componentRestarts;
+
+    // On garde ce champ TEXT pour stocker la liste des états des collecteurs (ComponentHealth)
+    @Column(columnDefinition = "TEXT")
+    private String snapshotData;
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\AlertRecord.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.ToString;
+
+import java.time.Instant;
+
+@Data
+@Entity
+@Table(name = "alert_records")
+public class AlertRecord {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long eventId;
+    private String ruleId;
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_id", nullable = false)
+    private Agent agent;
+
+    @Enumerated(EnumType.STRING)
+    private Severity severity;
+
+    @Enumerated(EnumType.STRING)
+    private AlertStatus status;        // ← remplace acknowledged
+
+    private String message;
+    private Instant createdAt;
+
+    // --- Champs humains (remplis par le L1 via l'API) ---
+    private Long qualifiedByUserId;    // ID du L1 qui a traité
+    private Instant qualifiedAt;       // Horodatage du traitement
+
+    @Column(columnDefinition = "TEXT")
+    private String justification;      // Obligatoire pour FALSE_POSITIVE
+
+    private Long incidentId;           // Lien vers l'incident (Module 2)
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\AuditLogEntry.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@NoArgsConstructor
+@Entity
+@Table(name = "audit_log")
+public class AuditLogEntry {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long userId;           // Qui a fait l'action
+    private String userFullName;
+    private String userRole;       // "L1", "L2", "MANAGER", "ADMIN"
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AuditAction actionType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AuditTargetType targetType;
+
+    private String targetId;       // ID de la cible (string car agentId est un string)
+    private String targetLabel;    // Label lisible ("INC-0001", "srv-web-01", "ahmed.l1")
+
+    @Column(columnDefinition = "TEXT")
+    private String details;        // Détails additionnels (diff config, justification, etc.)
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\Incident.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.IncidentStatus;
+import com.warroom.server.model.Severity;
+import jakarta.persistence.*;
+import lombok.Data;
+
+import java.time.Instant;
+
+@Data
+@Entity
+@Table(name = "incidents")
+public class Incident {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true)
+    private String incidentNumber; // INC-0001, INC-0002, ...
+
+    @Column(nullable = false)
+    private String title;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Severity severity;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private IncidentStatus status;
+
+    // L2 assigné (null = pool L2, en attente de prise en charge)
+    private Long assignedToUserId;
+
+    // L1 qui a créé l'incident
+    @Column(nullable = false)
+    private Long createdByUserId;
+
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String triageNote; // Note initiale obligatoire du L1
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @Column(nullable = false)
+    private Instant updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\IncidentAlert.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@Entity
+@Table(name = "incident_alerts", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"incident_id", "alert_id"})
+})
+public class IncidentAlert {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "incident_id", nullable = false)
+    private Long incidentId;
+
+    @Column(name = "alert_id", nullable = false)
+    private Long alertId;
+
+    public IncidentAlert(Long incidentId, Long alertId) {
+        this.incidentId = incidentId;
+        this.alertId = alertId;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\IncidentTimelineEntry.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.IncidentStatus;
+import com.warroom.server.model.TimelineEntryType;
+import jakarta.persistence.*;
+import lombok.Data;
+
+import java.time.Instant;
+
+@Data
+@Entity
+@Table(name = "incident_timeline")
+public class IncidentTimelineEntry {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Long incidentId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TimelineEntryType entryType;
+
+    @Column(nullable = false)
+    private Long authorUserId;
+
+    private String authorFullName;
+    private String authorRole;
+
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
+    // Pour STATUS_CHANGE : ancien et nouveau statut
+    @Enumerated(EnumType.STRING)
+    private IncidentStatus oldStatus;
+
+    @Enumerated(EnumType.STRING)
+    private IncidentStatus newStatus;
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    // Pour les entrées de type COUNTERMEASURE uniquement
+    private String countermeasureType;  // "BLOCK_IP", "DISABLE_ACCOUNT", etc.
+
+    @Column(columnDefinition = "TEXT")
+    private String technicalCommand;    // Commande technique exécutée (optionnel)
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+    }
+}
 
 ------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\entity\Notification.java
@@ -520,6 +3490,108 @@ public class Notification {
         this.message = message;
         this.relatedIncidentId = relatedIncidentId;
         this.read = false;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\SecurityEvent.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "security_events")
+public class SecurityEvent {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // Lien avec la table agents (Un agent a plusieurs événements)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_id", nullable = false)
+    private Agent agent;
+
+    private String sourceType; // ex: "linux.auth.log"
+    private Instant collectedAt; // Quand le capteur l'a vu
+    private Instant receivedAt;  // Quand le serveur l'a reçu
+
+    @Column(columnDefinition = "TEXT") // TEXT car un log peut être très long
+    private String payload;
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\entity\User.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.entity;
+
+import com.warroom.server.model.Role;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+@Entity
+@Table(name = "users") // Crucial pour éviter le conflit avec le mot-clé réservé de PostgreSQL
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true)
+    private String username;
+
+    @Column(nullable = false)
+    private String passwordHash; // On stockera uniquement le hash BCrypt
+
+    @Column(nullable = false)
+    private String fullName;
+
+    @Enumerated(EnumType.STRING) // Stocke "L1", "ADMIN" en texte clair dans la BDD, plus lisible
+    @Column(nullable = false)
+    private Role role;
+
+    private String email;
+
+    @Column(nullable = false)
+    private boolean active = true;
+
+    // --- Champs pour la sécurité Anti-Bruteforce ---
+
+    @Column(nullable = false)
+    private int failedAttempts = 0;
+
+    private Instant lockTime; // Horodatage du blocage (pour la pénalité de 15 minutes)
+
+    // --- Champs d'audit ---
+
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
+
+    private Instant lastLoginAt;
+
+    /**
+     * Méthode exécutée automatiquement par Hibernate juste avant le premier INSERT.
+     * Garantit que la date de création est toujours remplie.
+     */
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
     }
 }
 
@@ -775,8 +3847,1022 @@ public record UserResponse(
 ) {}
 
 ########################################################################################################################
+GROUPE : WARROOM/SECURITY
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\security\CustomUserDetailsService.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.security;
+
+import com.warroom.server.entity.User;
+import com.warroom.server.repository.UserRepository;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    public CustomUserDetailsService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // On cherche notre entité User
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur introuvable"));
+
+        // On la convertit dans le format attendu par Spring Security
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(user.getUsername())
+                .password(user.getPasswordHash())
+                .roles(user.getRole().name())
+                .disabled(!user.isActive())
+                .accountLocked(isAccountLocked(user))
+                .build();
+    }
+
+    /**
+     * Vérifie si le compte est actuellement sous pénalité anti-bruteforce.
+     */
+    private boolean isAccountLocked(User user) {
+        if (user.getLockTime() == null) return false;
+
+        // Verrouillé si lockTime + 15 minutes (900 secondes) est dans le futur par rapport à maintenant
+        return user.getLockTime().plusSeconds(900).isAfter(Instant.now());
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\security\SecurityConfig.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+                // LA CORRECTION DU POINT 2 EST ICI
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            // Erreur 401 : L'utilisateur n'est pas connecté
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Accès refusé - Session invalide ou expirée");
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            // Erreur 403 : L'utilisateur est connecté mais n'a pas le bon rôle
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Permissions insuffisantes");
+                        })
+                )
+
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/agents/**").permitAll()
+                        .anyRequest().authenticated()
+                )
+
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .maximumSessions(1) // Optionnel: empêche le même compte d'être connecté sur 2 PC en même temps
+                        .sessionRegistry(sessionRegistry())
+                );
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    @Bean
+    public HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
+    }
+
+    /**
+     * Le registre qui garde en mémoire toutes les sessions actives.
+     * Nous l'utiliserons pour "tuer" la session d'un utilisateur désactivé.
+     */
+    @Bean
+    public SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/CONFIG
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\config\DataInitializer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.config;
+
+import com.warroom.server.entity.User;
+import com.warroom.server.model.Role;
+import com.warroom.server.repository.UserRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+
+@Slf4j
+@Component
+public class DataInitializer implements CommandLineRunner {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public DataInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void run(String... args) {
+        // 1. Vérification de l'existence d'utilisateurs en base
+        if (userRepository.count() == 0) {
+            log.info("Base de données vide. Initialisation du compte administrateur par défaut...");
+
+            // 2. Création de l'utilisateur admin (selon Section 1.7 du contrat)
+            User admin = new User();
+            admin.setUsername("admin");
+            // On hache le mot de passe "admin" avec BCrypt via le passwordEncoder injecté
+            admin.setPasswordHash(passwordEncoder.encode("admin"));
+            admin.setFullName("Administrateur Système");
+            admin.setRole(Role.ADMIN);
+            admin.setEmail("admin@warroom.local");
+            admin.setActive(true);
+            admin.setFailedAttempts(0);
+
+            // Note : le champ createdAt sera géré par l'annotation @PrePersist dans l'entité User
+
+            // 3. Sauvegarde en base de données
+            userRepository.save(admin);
+
+            log.info("-------------------------------------------------------");
+            log.info("COMPTE ADMIN CRÉÉ AVEC SUCCÈS !");
+            log.info("Username : admin");
+            log.info("Password : admin (À changer impérativement en production)");
+            log.info("-------------------------------------------------------");
+        } else {
+            log.info("Des utilisateurs existent déjà en base. Initialisation annulée.");
+        }
+    }
+}
+
+########################################################################################################################
+GROUPE : WARROOM/ANALYSIS
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\EventAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import java.util.List;
+
+public interface EventAnalyzer {
+
+    /**
+     * Indique le sourceType que ce composant sait traiter (ex: "linux.auth.log")
+     */
+    String supportedSourceType();
+
+    /**
+     * Analyse l'événement brut et retourne une liste d'alertes (vide si tout est normal)
+     */
+    List<AlertRecord> analyze(SecurityEvent event);
+}
+
+########################################################################################################################
+GROUPE : WARROOM/ANALYSIS/IMPL
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\AuditAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class AuditAnalyzer implements EventAnalyzer {
+
+    @Override
+    public String supportedSourceType() {
+        return "linux.audit";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) return alerts;
+
+        if (payload.contains("key=\"warroom_module\"")) {
+            alerts.add(buildAlert(event, "AUDIT-MOD-01", Severity.CRITICAL,
+                    "Audit : Chargement de module noyau suspect."));
+        } else if (payload.contains("key=\"warroom_inject\"") && !payload.contains("exe=\"/usr/bin/gdb\"")) {
+            alerts.add(buildAlert(event, "AUDIT-INJECT-01", Severity.CRITICAL,
+                    "Audit : Injection de mémoire (ptrace) détectée."));
+        } else if (payload.contains("key=\"warroom_exec\"") && (payload.contains("exe=\"/usr/bin/wget\"") || payload.contains("exe=\"/usr/bin/curl\""))) {
+            alerts.add(buildAlert(event, "AUDIT-DL-01", Severity.HIGH,
+                    "Audit : Utilisation d'outils de téléchargement (wget/curl)."));
+        } else if (payload.contains("key=\"warroom_privilege\"")) {
+            alerts.add(buildAlert(event, "AUDIT-PRIV-01", Severity.CRITICAL,
+                    "Audit : Modification suspecte des droits sudoers."));
+        }
+
+        return alerts;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setStatus(AlertStatus.NEW);
+        return alert;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\AuthLogAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Component
+public class AuthLogAnalyzer implements EventAnalyzer {
+
+    private final Map<String, Deque<Instant>> ipFailureWindow = new ConcurrentHashMap<>();
+
+    private static final int WINDOW_SECONDS = 60;
+    private static final int BRUTE_FORCE_THRESHOLD = 5;
+
+    private static final Pattern IP_PATTERN = Pattern.compile("from (\\d+\\.\\d+\\.\\d+\\.\\d+)");
+
+    @Override
+    public String supportedSourceType() {
+        return "linux.auth.log";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) {
+            return alerts;
+        }
+
+        boolean isRootLogin = payload.contains("Accepted password for root")
+                || payload.contains("session opened for user root");
+
+        if (isRootLogin) {
+            alerts.add(buildAlert(event, "AUTH-ROOT-01", Severity.CRITICAL, "Alerte Critique : Connexion ROOT détectée avec succès."));
+            return alerts;
+        }
+
+        if (payload.contains("Failed password")) {
+            String sourceIp = extractIp(payload);
+            String trackingKey = (sourceIp != null) ? sourceIp : "unknown_ip";
+
+            Deque<Instant> timestamps = ipFailureWindow.computeIfAbsent(trackingKey, k -> new ConcurrentLinkedDeque<>());
+            Instant now = Instant.now();
+
+            timestamps.addLast(now);
+
+            while (!timestamps.isEmpty() && timestamps.peekFirst().isBefore(now.minusSeconds(WINDOW_SECONDS))) {
+                timestamps.pollFirst();
+            }
+
+            int currentFailures = timestamps.size();
+
+            if (currentFailures >= BRUTE_FORCE_THRESHOLD) {
+                alerts.add(buildAlert(event, "AUTH-BRUTE-01", Severity.HIGH,
+                        "ATTAQUE FORCE BRUTE : " + currentFailures + " échecs en " + WINDOW_SECONDS + "s depuis l'IP " + trackingKey));
+                ipFailureWindow.remove(trackingKey);
+
+            } else if (currentFailures >= 3) {
+                alerts.add(buildAlert(event, "AUTH-SUSP-01", Severity.MEDIUM,
+                        "Activité Suspecte : " + currentFailures + " échecs d'authentification depuis l'IP " + trackingKey));
+            }
+            // 1-2 échecs → comptés silencieusement
+        }
+
+        return alerts;
+    }
+
+    @Scheduled(fixedRate = 300000)
+    public void cleanOldEntries() {
+        Instant threshold = Instant.now().minusSeconds(WINDOW_SECONDS);
+        ipFailureWindow.entrySet().removeIf(entry -> {
+            Deque<Instant> timestamps = entry.getValue();
+            while (!timestamps.isEmpty() && timestamps.peekFirst().isBefore(threshold)) {
+                timestamps.pollFirst();
+            }
+            return timestamps.isEmpty();
+        });
+    }
+
+    private String extractIp(String payload) {
+        Matcher matcher = IP_PATTERN.matcher(payload);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setStatus(AlertStatus.NEW);
+        return alert;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\FileIntegrityAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Component
+public class FileIntegrityAnalyzer implements EventAnalyzer {
+
+    private final ObjectMapper objectMapper;
+
+    public FileIntegrityAnalyzer(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public String supportedSourceType() {
+        return "file.integrity";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) return alerts;
+
+        Map<String, String> fields;
+        try {
+            fields = objectMapper.readValue(payload, new TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            fields = parseLegacyPayload(payload);
+        }
+
+        String action = fields.get("action");
+        String file = fields.get("file");
+
+        if (action == null || file == null) return alerts;
+
+        Severity detectedSeverity = null;
+        String alertMessage = null;
+        String ruleId = null;
+
+        if (file.equals("/etc/shadow") || file.equals("/etc/sudoers")) {
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.CRITICAL;
+                ruleId = "FIM-VITAL-01";
+                alertMessage = "Fichier système vital altéré (" + file + ") - Action : " + action;
+            }
+        } else if (file.equals("/etc/passwd")) {
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.CRITICAL;
+                ruleId = "FIM-PASSWD-01";
+                alertMessage = "Modification ou Suppression de /etc/passwd (Backdoor ou Déni de service)";
+            }
+        } else if (file.equals("/etc/ssh/sshd_config")) {
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.HIGH;
+                ruleId = "FIM-SSH-01";
+                alertMessage = "Configuration du serveur SSH modifiée ou supprimée";
+            }
+        } else if (file.equals("/etc/crontab") || file.startsWith("/var/spool/cron/crontabs/")) {
+            if ("MODIFIED".equals(action) || "DELETED".equals(action)) {
+                detectedSeverity = Severity.HIGH;
+                ruleId = "FIM-CRON-01";
+                alertMessage = "Tâche planifiée globale altérée (Fichier : " + file + ")";
+            }
+        } else if (file.startsWith("/etc/cron.d/") && "CREATED".equals(action)) {
+            detectedSeverity = Severity.HIGH;
+            ruleId = "FIM-CRON-02";
+            alertMessage = "Nouvelle tâche planifiée système créée (Persistance suspectée)";
+        } else if (file.endsWith("/authorized_keys") || file.endsWith("/authorized_keys2")) {
+            if ("MODIFIED".equals(action) || "CREATED".equals(action)) {
+                detectedSeverity = Severity.HIGH;
+                ruleId = "FIM-SSHKEY-01";
+                alertMessage = "Clé SSH ajoutée ou modifiée (Accès permanent potentiel sur " + file + ")";
+            } else if ("DELETED".equals(action)) {
+                detectedSeverity = Severity.MEDIUM;
+                ruleId = "FIM-SSHKEY-02";
+                alertMessage = "Clé SSH supprimée (Nettoyage de traces sur " + file + ")";
+            }
+        } else if (file.equals("/etc/cron.allow") || file.equals("/etc/cron.deny")) {
+            detectedSeverity = Severity.MEDIUM;
+            ruleId = "FIM-CRON-03";
+            alertMessage = "Permissions des tâches planifiées modifiées (" + file + ")";
+        }
+
+        if (detectedSeverity != null) {
+            AlertRecord alert = new AlertRecord();
+            alert.setAgent(event.getAgent());
+            alert.setEventId(event.getId());
+            alert.setRuleId(ruleId);
+            alert.setSeverity(detectedSeverity);
+            alert.setMessage("INTÉGRITÉ COMPROMISE : " + alertMessage);
+            alert.setCreatedAt(Instant.now());
+            alert.setStatus(AlertStatus.NEW);
+            alerts.add(alert);
+        }
+
+        return alerts;
+    }
+
+    private Map<String, String> parseLegacyPayload(String payload) {
+        Map<String, String> fields = new HashMap<>();
+        Matcher m = Pattern.compile("(\\w+)=((?:(?!\\s+\\w+=).)+)").matcher(payload);
+        while (m.find()) {
+            fields.put(m.group(1), m.group(2).trim());
+        }
+        return fields;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\KernLogAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class KernLogAnalyzer implements EventAnalyzer {
+
+    @Override
+    public String supportedSourceType() {
+        return "linux.kern.log";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) return alerts;
+
+        if (payload.contains("insmod") || (payload.contains("module") && payload.contains("loaded"))) {
+            alerts.add(buildAlert(event, "KERN-MOD-01", Severity.CRITICAL,
+                    "Chargement de module Kernel détecté (Rootkit potentiel)."));
+        } else if (payload.contains("segfault")) {
+            alerts.add(buildAlert(event, "KERN-SEG-01", Severity.LOW,
+                    "Erreur de segmentation (Segfault) détectée."));
+        }
+
+        return alerts;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setStatus(AlertStatus.NEW);
+        return alert;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\NetworkAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Component
+public class NetworkAnalyzer implements EventAnalyzer {
+
+    private final Map<String, Set<String>> knownListenPorts = new ConcurrentHashMap<>();
+
+    private static final Set<String> STANDARD_PORTS = Set.of("22", "80", "443", "8080", "3306", "5432");
+    private static final Set<String> MALICIOUS_PORTS = Set.of("4444", "4445", "1337", "5555", "9999");
+    private static final Set<String> SUSPICIOUS_PROCESSES = Set.of("nc", "ncat", "bash", "sh", "python", "python3", "perl", "ruby");
+
+    private static final Pattern PROCESS_PATTERN = Pattern.compile("\"(\\w+)\",pid=(\\d+)");
+
+    @Override
+    public String supportedSourceType() {
+        return "network.connections";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+        String agentId = event.getAgent().getAgentId();
+
+        if (payload == null || payload.isEmpty()) return alerts;
+
+        String[] lines = payload.split("\n");
+        Set<String> currentListenPorts = new HashSet<>();
+        Set<String> previousListenPorts = knownListenPorts.getOrDefault(agentId, new HashSet<>());
+
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) continue;
+
+            String[] columns = line.split("\\s+");
+            if (columns.length < 5) continue;
+
+            String state = columns[0];
+            String localAddressFull = columns[3];
+            String peerAddressFull = columns[4];
+            String processInfo = (columns.length > 5) ? columns[5] : "unknown";
+
+            String localPort = extractPort(localAddressFull);
+            String peerPort = extractPort(peerAddressFull);
+            String processName = extractProcessName(processInfo);
+
+            if ("ESTAB".equals(state)) {
+                boolean isMaliciousPort = MALICIOUS_PORTS.contains(peerPort);
+                boolean isSuspiciousProcess = SUSPICIOUS_PROCESSES.contains(processName);
+                boolean isExternal = !isLocalNetwork(peerAddressFull);
+
+                if (isMaliciousPort && isSuspiciousProcess) {
+                    alerts.add(buildAlert(event, "NET-REVSHELL-01", Severity.CRITICAL,
+                            "REVERSE SHELL CONFIRMÉ : '" + processName + "' connecté au port " + peerPort + " (" + peerAddressFull + ")"));
+                } else if (isMaliciousPort) {
+                    alerts.add(buildAlert(event, "NET-C2-PORT", Severity.CRITICAL,
+                            "PORT PIRATE DÉTECTÉ : Connexion vers le port " + peerPort + " (" + peerAddressFull + ") via '" + processName + "'"));
+                } else if (isSuspiciousProcess && isExternal) {
+                    alerts.add(buildAlert(event, "NET-SUSP-EXT", Severity.HIGH,
+                            "PROCESSUS SUSPECT EN RÉSEAU : '" + processName + "' connecté à " + peerAddressFull + ":" + peerPort));
+                } else if (!isStandardPort(peerPort) && isExternal && "unknown".equals(processName)) {
+                    alerts.add(buildAlert(event, "NET-UNK-EXT", Severity.MEDIUM,
+                            "Connexion vers port inhabituel " + peerPort + " (" + peerAddressFull + ") - processus non identifié"));
+                }
+            }
+
+            if ("LISTEN".equals(state)) {
+                currentListenPorts.add(localPort);
+
+                if (!previousListenPorts.contains(localPort) && !previousListenPorts.isEmpty()) {
+                    if (!isStandardPort(localPort)) {
+                        alerts.add(buildAlert(event, "NET-NEW-LISTEN", Severity.HIGH,
+                                "NOUVEAU SERVICE SUSPECT : Port non-standard en écoute (" + localPort + ") par '" + processName + "'"));
+                    } else {
+                        alerts.add(buildAlert(event, "NET-NEW-LISTEN", Severity.MEDIUM,
+                                "Nouveau service démarré sur le port standard : " + localPort));
+                    }
+                }
+            }
+        }
+
+        knownListenPorts.put(agentId, currentListenPorts);
+        return alerts;
+    }
+
+    private String extractPort(String addressFull) {
+        int lastColon = addressFull.lastIndexOf(':');
+        if (lastColon != -1 && lastColon < addressFull.length() - 1) {
+            return addressFull.substring(lastColon + 1);
+        }
+        return "unknown";
+    }
+
+    private String extractProcessName(String processInfo) {
+        if ("unknown".equals(processInfo)) return "unknown";
+        Matcher matcher = PROCESS_PATTERN.matcher(processInfo);
+        return matcher.find() ? matcher.group(1) : "unknown";
+    }
+
+    private boolean isStandardPort(String port) {
+        return STANDARD_PORTS.contains(port);
+    }
+
+    private boolean isLocalNetwork(String ip) {
+        if (ip.startsWith("127.") || ip.startsWith("0.0.0.0") || ip.startsWith("::") || ip.equals("*")) return true;
+        if (ip.startsWith("10.") || ip.startsWith("192.168.")) return true;
+        if (ip.startsWith("172.")) {
+            String[] parts = ip.split("\\.");
+            if (parts.length > 1) {
+                try {
+                    int secondOctet = Integer.parseInt(parts[1]);
+                    return secondOctet >= 16 && secondOctet <= 31;
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return false;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setStatus(AlertStatus.NEW);
+        return alert;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\ProcessAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Component
+public class ProcessAnalyzer implements EventAnalyzer {
+
+    private final Map<String, Set<String>> knownRootProcesses = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> alertedHighCpuPids = new ConcurrentHashMap<>();
+
+    private static final Set<String> MINERS = Set.of("minerd", "xmrig", "cgminer");
+    private static final Set<String> OFFENSIVE_TOOLS = Set.of("nc", "ncat", "metasploit", "msfconsole");
+
+    @Override
+    public String supportedSourceType() {
+        return "process.list";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+        String agentId = event.getAgent().getAgentId();
+
+        if (payload == null || payload.isEmpty()) return alerts;
+
+        String[] lines = payload.split("\n");
+
+        Set<String> previousRootProcesses = knownRootProcesses.getOrDefault(agentId, new HashSet<>());
+        Set<String> currentRootProcesses = new HashSet<>();
+
+        Set<String> cpuAlertedPids = alertedHighCpuPids.getOrDefault(agentId, new HashSet<>());
+        Set<String> activePids = new HashSet<>();
+
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) continue;
+
+            String[] columns = line.split("\\s+", 11);
+            if (columns.length < 11) continue;
+
+            String user = columns[0];
+            String pid = columns[1];
+            String command = columns[10];
+            String lowerCommand = command.toLowerCase();
+
+            double cpu = 0.0;
+            try { cpu = Double.parseDouble(columns[2]); }
+            catch (NumberFormatException ignored) {}
+
+            activePids.add(pid);
+            String rootProcessKey = pid + ":" + command;
+            boolean isNewRoot = false;
+
+            if ("root".equals(user)) {
+                currentRootProcesses.add(rootProcessKey);
+                if (!previousRootProcesses.isEmpty() && !previousRootProcesses.contains(rootProcessKey)) {
+                    isNewRoot = true;
+                }
+            }
+
+            if (isNewRoot) {
+                alerts.add(buildAlert(event, "PROC-NEW-ROOT", Severity.HIGH,
+                        "Nouveau processus root démarré : " + command + " (PID: " + pid + ")"));
+            }
+
+            if (MINERS.stream().anyMatch(lowerCommand::contains)) {
+                alerts.add(buildAlert(event, "PROC-MINER-01", Severity.CRITICAL,
+                        "Cryptomineur confirmé : " + command + " (PID: " + pid + ")"));
+                continue;
+            }
+
+            if (OFFENSIVE_TOOLS.stream().anyMatch(lowerCommand::contains)) {
+                alerts.add(buildAlert(event, "PROC-OFFENS-01", Severity.HIGH,
+                        "Processus offensif détecté : " + command + " (PID: " + pid + ")"));
+                continue;
+            }
+
+            if (cpu > 90.0 && !cpuAlertedPids.contains(pid)) {
+                alerts.add(buildAlert(event, "PROC-CPU-HIGH", Severity.HIGH,
+                        "Surcharge CPU critique (" + cpu + "%) : " + command + " (PID: " + pid + ")"));
+                cpuAlertedPids.add(pid);
+            } else if (cpu > 80.0 && !cpuAlertedPids.contains(pid)) {
+                alerts.add(buildAlert(event, "PROC-CPU-MEDIUM", Severity.MEDIUM,
+                        "CPU anormal (" + cpu + "%) : " + command + " (PID: " + pid + ")"));
+                cpuAlertedPids.add(pid);
+            }
+        }
+
+        cpuAlertedPids.retainAll(activePids);
+        alertedHighCpuPids.put(agentId, cpuAlertedPids);
+        knownRootProcesses.put(agentId, currentRootProcesses);
+
+        return alerts;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setStatus(AlertStatus.NEW);
+        return alert;
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\analysis\impl\SyslogAnalyzer.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.analysis.impl;
+
+import com.warroom.server.analysis.EventAnalyzer;
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.entity.SecurityEvent;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class SyslogAnalyzer implements EventAnalyzer {
+
+    @Override
+    public String supportedSourceType() {
+        return "linux.syslog";
+    }
+
+    @Override
+    public List<AlertRecord> analyze(SecurityEvent event) {
+        List<AlertRecord> alerts = new ArrayList<>();
+        String payload = event.getPayload();
+
+        if (payload == null || payload.isEmpty()) return alerts;
+
+        if (payload.contains("CRON") && (payload.contains("/tmp/") || payload.contains("wget") || payload.contains("curl") || payload.contains("nc "))) {
+            alerts.add(buildAlert(event, "SYS-CRON-01", Severity.HIGH,
+                    "Tâche CRON suspecte (téléchargement ou exécution depuis /tmp)"));
+        } else if (payload.contains("systemd") && payload.contains("Stopped") &&
+                (payload.contains("auditd") || payload.contains("ufw") || payload.contains("apparmor") || payload.contains("fail2ban"))) {
+            alerts.add(buildAlert(event, "SYS-SVCSTOP-01", Severity.MEDIUM,
+                    "Un service de sécurité critique a été arrêté."));
+        } else if (payload.contains("Out of memory: Killed process")) {
+            alerts.add(buildAlert(event, "SYS-OOM-01", Severity.LOW,
+                    "OOM Killer déclenché (Surcharge mémoire RAM)."));
+        }
+
+        return alerts;
+    }
+
+    private AlertRecord buildAlert(SecurityEvent event, String ruleId, Severity severity, String message) {
+        AlertRecord alert = new AlertRecord();
+        alert.setAgent(event.getAgent());
+        alert.setEventId(event.getId());
+        alert.setRuleId(ruleId);
+        alert.setSeverity(severity);
+        alert.setMessage(message);
+        alert.setCreatedAt(Instant.now());
+        alert.setStatus(AlertStatus.NEW);
+        return alert;
+    }
+}
+
+########################################################################################################################
 GROUPE : WARROOM/MODEL
 ########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\AlertStatus.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum AlertStatus {
+    NEW,              // Alerte vient d'être générée par un analyzer
+    ACKNOWLEDGED,     // L1 a vu et pris en charge
+    FALSE_POSITIVE,   // L1 a écarté (avec justification)
+    ESCALATED         // L1 a créé un incident (Module 2)
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\AuditAction.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum AuditAction {
+    LOGIN,
+    LOGOUT,
+    LOGIN_FAILED,
+    ALERT_ACKNOWLEDGED,
+    ALERT_FALSE_POSITIVE,
+    ALERT_ESCALATED,
+    INCIDENT_CREATED,
+    INCIDENT_TAKEN,
+    INCIDENT_STATUS_CHANGED,
+    INCIDENT_COUNTERMEASURE_ADDED,
+    INCIDENT_NOTE_ADDED,
+    INCIDENT_REASSIGNED,
+    INCIDENT_RETURNED,
+    INCIDENT_CLOSED,
+    AGENT_CONFIG_CHANGED,
+    USER_CREATED,
+    USER_DISABLED,
+    USER_ENABLED
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\AuditTargetType.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum AuditTargetType {
+    ALERT,
+    INCIDENT,
+    AGENT,
+    USER,
+    SESSION
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\HealthStatus.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum HealthStatus {
+    GREEN,   // < 90s
+    ORANGE,  // 90s à 5min
+    RED      // > 5min ou jamais vu
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\IncidentStatus.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum IncidentStatus {
+    OPEN,                   // Créé par le L1, en attente de prise en charge
+    INVESTIGATING,          // L2 analyse la menace
+    REMEDIATING,            // L2 applique les contre-mesures
+    RESOLVED,               // Contre-mesures appliquées, en observation
+    CLOSED,                 // Confirmé résolu, archivé
+    CLOSED_FALSE_POSITIVE   // Renvoyé au L1, ce n'était pas un vrai incident
+}
 
 ------------------------------------------------------------------------------------------------------------------------
 FICHIER : src\main\java\com\warroom\server\model\NotificationType.java
@@ -787,5 +4873,142 @@ public enum NotificationType {
     INCIDENT_ASSIGNED,   // → L2 quand un incident lui est assigné
     INCIDENT_RETURNED,   // → L1 quand son escalade est renvoyée
     SLA_WARNING          // → MANAGER (future extension)
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\Role.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+/**
+ * Hiérarchie des rôles du SOC WarRoom.
+ */
+public enum Role {
+    L1,       // Analyste Triage
+    L2,       // Analyste Réponse
+    MANAGER,  // Responsable SOC
+    ADMIN     // Administrateur Système
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\Severity.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum Severity {
+    INFO,       // Événement normal loggé pour audit
+    LOW,        // Anomalie mineure
+    MEDIUM,     // Comportement suspect
+    HIGH,       // Menace probable (brute-force, connexion root)
+    CRITICAL    // Intrusion confirmée (modification /etc/shadow, reverse shell)
+}
+
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\model\TimelineEntryType.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.model;
+
+public enum TimelineEntryType {
+    STATUS_CHANGE,    // Changement de statut (OPEN → INVESTIGATING, etc.)
+    NOTE,             // Note libre (L1, L2, Manager)
+    COUNTERMEASURE,   // Contre-mesure appliquée (Module 3)
+    REASSIGNMENT,     // Réassignation par le Manager
+    CLOSURE           // Clôture ou renvoi au L1
+}
+
+########################################################################################################################
+GROUPE : WARROOM/SPECIFICATION
+########################################################################################################################
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\specification\AlertSpecifications.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.specification;
+
+import com.warroom.server.entity.AlertRecord;
+import com.warroom.server.model.AlertStatus;
+import com.warroom.server.model.Severity;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.time.Instant;
+import java.util.List;
+
+public class AlertSpecifications {
+
+    private AlertSpecifications() {} // classe utilitaire
+
+    public static Specification<AlertRecord> hasSeverityIn(List<Severity> severities) {
+        if (severities == null || severities.isEmpty()) return null;
+        return (root, query, cb) -> root.get("severity").in(severities);
+    }
+
+    public static Specification<AlertRecord> hasStatusIn(List<AlertStatus> statuses) {
+        if (statuses == null || statuses.isEmpty()) return null;
+        return (root, query, cb) -> root.get("status").in(statuses);
+    }
+
+    public static Specification<AlertRecord> hasAgentId(String agentId) {
+        if (agentId == null || agentId.isBlank()) return null;
+        return (root, query, cb) -> cb.equal(root.get("agent").get("agentId"), agentId);
+    }
+
+    public static Specification<AlertRecord> hasRuleId(String ruleId) {
+        if (ruleId == null || ruleId.isBlank()) return null;
+        return (root, query, cb) -> cb.equal(root.get("ruleId"), ruleId);
+    }
+
+    public static Specification<AlertRecord> createdAfter(Instant from) {
+        if (from == null) return null;
+        return (root, query, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), from);
+    }
+
+    public static Specification<AlertRecord> createdBefore(Instant to) {
+        if (to == null) return null;
+        return (root, query, cb) -> cb.lessThanOrEqualTo(root.get("createdAt"), to);
+    }
+}
+
+------------------------------------------------------------------------------------------------------------------------
+FICHIER : src\main\java\com\warroom\server\specification\AuditLogSpecifications.java
+------------------------------------------------------------------------------------------------------------------------
+package com.warroom.server.specification;
+
+import com.warroom.server.entity.AuditLogEntry;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.time.Instant;
+import java.util.List;
+
+public class AuditLogSpecifications {
+
+    private AuditLogSpecifications() {}
+
+    public static Specification<AuditLogEntry> hasUserId(Long userId) {
+        if (userId == null) return null;
+        return (root, query, cb) -> cb.equal(root.get("userId"), userId);
+    }
+
+    public static Specification<AuditLogEntry> hasActionTypeIn(List<AuditAction> actions) {
+        if (actions == null || actions.isEmpty()) return null;
+        return (root, query, cb) -> root.get("actionType").in(actions);
+    }
+
+    public static Specification<AuditLogEntry> hasTargetType(AuditTargetType targetType) {
+        if (targetType == null) return null;
+        return (root, query, cb) -> cb.equal(root.get("targetType"), targetType);
+    }
+
+    public static Specification<AuditLogEntry> createdAfter(Instant from) {
+        if (from == null) return null;
+        return (root, query, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), from);
+    }
+
+    public static Specification<AuditLogEntry> createdBefore(Instant to) {
+        if (to == null) return null;
+        return (root, query, cb) -> cb.lessThanOrEqualTo(root.get("createdAt"), to);
+    }
 }
 

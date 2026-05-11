@@ -17,5 +17,6 @@ public enum AuditAction {
     INCIDENT_CLOSED,
     AGENT_CONFIG_CHANGED,
     USER_CREATED,
-    USER_DISABLED
+    USER_DISABLED,
+    USER_ENABLED
 }

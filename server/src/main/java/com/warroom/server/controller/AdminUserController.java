@@ -77,7 +77,12 @@ public class AdminUserController {
     public ResponseEntity<?> enableUser(@PathVariable("userId") Long userId, Authentication authentication) {
         try {
             Role currentUserRole = extractRole(authentication);
-            adminUserService.enableUser(userId, currentUserRole);
+            User admin = extractUser(authentication); // On extrait l'admin qui fait l'action
+
+            // Appel avec les infos d'audit
+            adminUserService.enableUser(userId, currentUserRole,
+                    admin.getId(), admin.getFullName(), admin.getRole().name());
+
             return ResponseEntity.ok(Map.of("message", "Compte réactivé avec succès."));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));

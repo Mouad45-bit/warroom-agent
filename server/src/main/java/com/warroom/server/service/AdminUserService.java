@@ -139,10 +139,23 @@ public class AdminUserService {
                     AuditAction.USER_DISABLED, AuditTargetType.USER,
                     userId.toString(), user.getUsername(), null);
         }
+
+
+
+
+
     }
 
+    // NOUVEAU : Méthode de base (sans audit direct si besoin interne)
     @Transactional
     public void enableUser(Long userId, Role currentUserRole) {
+        enableUser(userId, currentUserRole, null, null, null);
+    }
+
+    // NOUVEAU : La vraie méthode avec le contexte d'audit
+    @Transactional
+    public void enableUser(Long userId, Role currentUserRole,
+                           Long adminUserId, String adminFullName, String adminRole) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Utilisateur introuvable."));
 
@@ -156,6 +169,13 @@ public class AdminUserService {
         userRepository.save(user);
 
         log.info("Compte réactivé : {}", user.getUsername());
+
+        // *** MODULE 6 — AUDIT USER_ENABLED ***
+        if (adminUserId != null) {
+            auditService.log(adminUserId, adminFullName, adminRole,
+                    AuditAction.USER_ENABLED, AuditTargetType.USER,
+                    userId.toString(), user.getUsername(), null);
+        }
     }
 
     private UserResponse mapToResponse(User user) {

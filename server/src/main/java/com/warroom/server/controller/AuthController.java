@@ -2,12 +2,16 @@ package com.warroom.server.controller;
 
 import com.warroom.server.dto.LoginRequest;
 import com.warroom.server.dto.UserResponse;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
 import com.warroom.server.repository.UserRepository;
+import com.warroom.server.service.AuditService;
 import com.warroom.server.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.Authentication;
@@ -22,10 +26,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
-    public AuthController(AuthService authService, UserRepository userRepository) {
+    public AuthController(AuthService authService, UserRepository userRepository , AuditService auditService) {
         this.authService = authService;
         this.userRepository = userRepository;
+        this.auditService = auditService;
     }
 
     @PostMapping("/login")
@@ -43,12 +49,17 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletRequest request) {
-        SecurityContextHolder.clearContext();
-        var session = request.getSession(false); // ne crée pas de session si elle n'existe pas
-        if (session != null) {
-            session.invalidate();
+    public ResponseEntity<?> logout(HttpServletRequest request, Authentication auth) { // AJOUTE Authentication
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            userRepository.findByUsername(auth.getName()).ifPresent(user -> {
+                auditService.log(user.getId(), user.getFullName(), user.getRole().name(),
+                        AuditAction.LOGOUT, AuditTargetType.SESSION,
+                        request.getSession().getId(), "Session Web", "Déconnexion réussie");
+            });
         }
+        SecurityContextHolder.clearContext();
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
         return ResponseEntity.ok(Map.of("message", "Déconnexion réussie."));
     }
 
