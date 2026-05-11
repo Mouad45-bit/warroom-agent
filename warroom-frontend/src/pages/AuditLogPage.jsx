@@ -8,10 +8,9 @@
 //
 //  Fonctionnalités :
 //    - Liste paginée, triée par createdAt DESC
-//    - Filtres : par utilisateur, par type d'action, par période
-//    - Labels français lisibles (pas les codes enum)
+//    - Filtres : par utilisateur, par type d'action, par cible, par période
+//    - Labels français lisibles
 //    - Cible cliquable (navigue vers alertes/incidents/agents)
-//    - Aucun bouton d'action — registre immuable
 //
 //  Contrat d'API :
 //    GET /api/admin/audit-log → MANAGER, ADMIN
@@ -32,11 +31,11 @@ import {
     ScrollText,
 } from 'lucide-react';
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 const PAGE_SIZE = 30;
 
 // ══════════════════════════════════════════════════════════════
-//  MAPPING actionType → label affiché en français
+//  CONSTANTES ET MAPPING
 // ══════════════════════════════════════════════════════════════
 const ACTION_LABELS = {
     LOGIN:                          'Connexion',
@@ -56,9 +55,20 @@ const ACTION_LABELS = {
     AGENT_CONFIG_CHANGED:           'A modifié la config agent',
     USER_CREATED:                   'A créé un compte',
     USER_DISABLED:                  'A désactivé un compte',
+    USER_ENABLED:                   'A réactivé un compte', // NOUVEAU
 };
 
-// ── Couleur du badge de rôle ─────────────────────────────────
+const ACTION_TYPES = Object.keys(ACTION_LABELS);
+
+const TARGET_TYPES = ['ALERT', 'INCIDENT', 'AGENT', 'USER', 'SESSION'];
+const TARGET_LABELS = {
+    ALERT: 'Alerte',
+    INCIDENT: 'Incident',
+    AGENT: 'Agent',
+    USER: 'Utilisateur',
+    SESSION: 'Session'
+};
+
 const ROLE_BADGE = {
     L1:      'bg-blue-100 text-blue-700',
     L2:      'bg-purple-100 text-purple-700',
@@ -66,32 +76,29 @@ const ROLE_BADGE = {
     ADMIN:   'bg-brand-50 text-brand-600',
 };
 
-// ── Types d'action groupés pour le filtre dropdown ───────────
-const ACTION_TYPES = Object.keys(ACTION_LABELS);
-
 export default function AuditLogPage() {
     const navigate = useNavigate();
 
-    // ── Liste ────────────────────────────────────────────────
+    // ── Liste
     const [entries, setEntries] = useState([]);
     const [page, setPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [totalElements, setTotalElements] = useState(0);
     const [loadingList, setLoadingList] = useState(true);
 
-    // ── Filtres ──────────────────────────────────────────────
+    // ── Filtres
     const [filters, setFilters] = useState({
         userId: '',
         actionType: '',
+        targetType: '',
         from: '',
         to: '',
     });
     const [showFilters, setShowFilters] = useState(false);
 
-    // ── Utilisateurs pour le dropdown ────────────────────────
+    // ── Utilisateurs pour le dropdown
     const [auditUsers, setAuditUsers] = useState([]);
 
-    // Charger les utilisateurs distincts
     useEffect(() => {
         if (USE_MOCK_API) {
             setAuditUsers(mockGetAuditUsers());
@@ -106,20 +113,24 @@ export default function AuditLogPage() {
         }
     }, []);
 
-    // ══════════════════════════════════════════════════════════
-    //  CHARGEMENT LISTE
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
+    //  CHARGEMENT LISTE (AVEC CORRECTION DES DATES ISO)
+    // ══════════════════════════════════════════════════════════════
     const fetchEntries = useCallback(async () => {
         setLoadingList(true);
         try {
+            const isoFrom = filters.from ? new Date(filters.from).toISOString() : undefined;
+            const isoTo = filters.to ? new Date(filters.to).toISOString() : undefined;
+
             if (USE_MOCK_API) {
                 const data = await mockGetAuditLog({
                     page,
                     size: PAGE_SIZE,
                     userId: filters.userId || undefined,
                     actionType: filters.actionType || undefined,
-                    from: filters.from || undefined,
-                    to: filters.to || undefined,
+                    targetType: filters.targetType || undefined,
+                    from: isoFrom,
+                    to: isoTo,
                 });
                 setEntries(data.content);
                 setTotalPages(data.totalPages);
@@ -128,10 +139,12 @@ export default function AuditLogPage() {
                 const params = new URLSearchParams();
                 params.append('page', page);
                 params.append('size', PAGE_SIZE);
+
                 if (filters.userId) params.append('userId', filters.userId);
                 if (filters.actionType) params.append('actionType', filters.actionType);
-                if (filters.from) params.append('from', filters.from);
-                if (filters.to) params.append('to', filters.to);
+                if (filters.targetType) params.append('targetType', filters.targetType);
+                if (isoFrom) params.append('from', isoFrom);
+                if (isoTo) params.append('to', isoTo);
 
                 const res = await api.get(`/api/admin/audit-log?${params.toString()}`);
                 setEntries(res.data.content);
@@ -146,29 +159,25 @@ export default function AuditLogPage() {
 
     useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
-    // ── Réinitialiser les filtres ────────────────────────────
     const resetFilters = () => {
-        setFilters({ userId: '', actionType: '', from: '', to: '' });
+        setFilters({ userId: '', actionType: '', targetType: '', from: '', to: '' });
         setPage(0);
     };
 
-    // ── Naviguer vers la cible ───────────────────────────────
     const navigateToTarget = (entry) => {
         if (entry.targetType === 'ALERT') navigate('/alerts');
         else if (entry.targetType === 'INCIDENT') navigate('/incidents');
         else if (entry.targetType === 'AGENT') navigate('/agents');
         else if (entry.targetType === 'USER') navigate('/admin/users');
-        // SESSION → pas de navigation
     };
 
-    const isFilterActive = filters.userId || filters.actionType || filters.from || filters.to;
+    const isFilterActive = filters.userId || filters.actionType || filters.targetType || filters.from || filters.to;
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     //  RENDU
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     return (
         <div className="p-8">
-
             {/* ── Header ─────────────────────────────────────── */}
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -176,93 +185,53 @@ export default function AuditLogPage() {
                 </h1>
                 <div className="flex items-center gap-2">
                     {isFilterActive && (
-                        <button
-                            onClick={resetFilters}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
-                        >
+                        <button onClick={resetFilters} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
                             <RotateCcw className="w-3 h-3" />
                             Réinitialiser
                         </button>
                     )}
-                    <button
-                        onClick={() => setShowFilters(!showFilters)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border transition-colors cursor-pointer ${
-                            showFilters || isFilterActive
-                                ? 'bg-brand-50 text-brand-600 border-brand-200'
-                                : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                        }`}
-                    >
+                    <button onClick={() => setShowFilters(!showFilters)} className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border transition-colors cursor-pointer ${showFilters || isFilterActive ? 'bg-brand-50 text-brand-600 border-brand-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
                         <Filter className="w-3 h-3" />
                         Filtres
                     </button>
                 </div>
             </div>
 
-            {/* ── Barre de filtres ─────────────────────────────── */}
+            {/* ── Barre de filtres (AVEC TARGET TYPE & 5 COLONNES) ── */}
             {showFilters && (
-                <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-                    {/* Par utilisateur */}
+                <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 grid grid-cols-1 md:grid-cols-5 gap-3">
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
-                            Utilisateur
-                        </label>
-                        <select
-                            value={filters.userId}
-                            onChange={e => { setFilters(prev => ({ ...prev, userId: e.target.value })); setPage(0); }}
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-                        >
+                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">Utilisateur</label>
+                        <select value={filters.userId} onChange={e => { setFilters(prev => ({ ...prev, userId: e.target.value })); setPage(0); }} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600">
                             <option value="">Tous</option>
-                            {auditUsers.map(u => (
-                                <option key={u.userId} value={u.userId}>
-                                    {u.fullName} ({u.role})
-                                </option>
-                            ))}
+                            {auditUsers.map(u => <option key={u.userId} value={u.userId}>{u.fullName} ({u.role})</option>)}
                         </select>
                     </div>
 
-                    {/* Par type d'action */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
-                            Action
-                        </label>
-                        <select
-                            value={filters.actionType}
-                            onChange={e => { setFilters(prev => ({ ...prev, actionType: e.target.value })); setPage(0); }}
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-                        >
+                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">Action</label>
+                        <select value={filters.actionType} onChange={e => { setFilters(prev => ({ ...prev, actionType: e.target.value })); setPage(0); }} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600">
                             <option value="">Toutes</option>
-                            {ACTION_TYPES.map(type => (
-                                <option key={type} value={type}>
-                                    {ACTION_LABELS[type]}
-                                </option>
-                            ))}
+                            {ACTION_TYPES.map(type => <option key={type} value={type}>{ACTION_LABELS[type]}</option>)}
                         </select>
                     </div>
 
-                    {/* Date début */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
-                            Depuis
-                        </label>
-                        <input
-                            type="datetime-local"
-                            value={filters.from}
-                            onChange={e => { setFilters(prev => ({ ...prev, from: e.target.value })); setPage(0); }}
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-                        />
+                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">Cible</label>
+                        <select value={filters.targetType} onChange={e => { setFilters(prev => ({ ...prev, targetType: e.target.value })); setPage(0); }} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600">
+                            <option value="">Toutes</option>
+                            {TARGET_TYPES.map(type => <option key={type} value={type}>{TARGET_LABELS[type]}</option>)}
+                        </select>
                     </div>
 
-                    {/* Date fin */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
-                            Jusqu'à
-                        </label>
-                        <input
-                            type="datetime-local"
-                            value={filters.to}
-                            onChange={e => { setFilters(prev => ({ ...prev, to: e.target.value })); setPage(0); }}
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-                        />
+                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">Depuis</label>
+                        <input type="datetime-local" value={filters.from} onChange={e => { setFilters(prev => ({ ...prev, from: e.target.value })); setPage(0); }} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600" />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">Jusqu'à</label>
+                        <input type="datetime-local" value={filters.to} onChange={e => { setFilters(prev => ({ ...prev, to: e.target.value })); setPage(0); }} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600" />
                     </div>
                 </div>
             )}
@@ -297,56 +266,33 @@ export default function AuditLogPage() {
 
                                 return (
                                     <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
-                                        {/* Horodatage */}
                                         <td className="px-6 py-3 text-xs text-gray-500 whitespace-nowrap">
                                             {new Date(entry.createdAt).toLocaleString('fr-FR', {
                                                 day: '2-digit', month: '2-digit', year: 'numeric',
                                                 hour: '2-digit', minute: '2-digit', second: '2-digit',
                                             })}
                                         </td>
-
-                                        {/* Utilisateur + badge rôle */}
                                         <td className="px-6 py-3">
                                             <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-medium text-gray-900">
-                                                        {entry.userFullName}
-                                                    </span>
-                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${roleBadge}`}>
-                                                        {entry.userRole}
-                                                    </span>
+                                                <span className="text-xs font-medium text-gray-900">{entry.userFullName}</span>
+                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${roleBadge}`}>{entry.userRole}</span>
                                             </div>
                                         </td>
-
-                                        {/* Action (label français) */}
                                         <td className="px-6 py-3 text-xs text-gray-700">
                                             {ACTION_LABELS[entry.actionType] || entry.actionType}
                                         </td>
-
-                                        {/* Cible (cliquable si pertinent) */}
                                         <td className="px-6 py-3">
                                             {canNavigate ? (
-                                                <button
-                                                    onClick={() => navigateToTarget(entry)}
-                                                    className="text-xs text-brand-600 font-medium hover:underline cursor-pointer"
-                                                >
+                                                <button onClick={() => navigateToTarget(entry)} className="text-xs text-brand-600 font-medium hover:underline cursor-pointer">
                                                     {entry.targetLabel || '—'}
                                                 </button>
                                             ) : (
-                                                <span className="text-xs text-gray-400">
-                                                        {entry.targetLabel || '—'}
-                                                    </span>
+                                                <span className="text-xs text-gray-400">{entry.targetLabel || '—'}</span>
                                             )}
                                         </td>
-
-                                        {/* Détails (troncature) */}
                                         <td className="px-6 py-3">
                                             {entry.details ? (
-                                                <span
-                                                    className="text-xs text-gray-400 truncate block max-w-[200px]"
-                                                    title={entry.details}
-                                                >
-                                                        {entry.details}
-                                                    </span>
+                                                <span className="text-xs text-gray-400 truncate block max-w-[200px]" title={entry.details}>{entry.details}</span>
                                             ) : (
                                                 <span className="text-xs text-gray-300">—</span>
                                             )}
@@ -356,15 +302,8 @@ export default function AuditLogPage() {
                             })}
                             </tbody>
                         </table>
-
-                        {/* Pagination */}
                         <div className="px-6 py-3">
-                            <Pagination
-                                page={page}
-                                totalPages={totalPages}
-                                totalElements={totalElements}
-                                onPageChange={setPage}
-                            />
+                            <Pagination page={page} totalPages={totalPages} totalElements={totalElements} onPageChange={setPage} />
                         </div>
                     </>
                 )}

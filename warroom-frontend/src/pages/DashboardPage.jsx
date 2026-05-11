@@ -52,7 +52,7 @@ import {
     BarChart3,
 } from 'lucide-react';
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 // ── Utilitaire : secondes → texte lisible ────────────────────
 function formatDuration(seconds) {

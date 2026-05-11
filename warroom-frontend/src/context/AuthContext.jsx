@@ -28,7 +28,7 @@ const AuthContext = createContext(null);
 // true = Utilise les fausses données (pour coder l'UI)
 // false = Utilise le vrai backend Spring Boot (Production/Tests)
 // ══════════════════════════════════════════════════════════════
-const USE_MOCK_AUTH = true;
+const USE_MOCK_AUTH = false;
 
 // ── PROVIDER ────────────────────────────────────────────────
 // Enveloppe toute l'application dans <AuthProvider> (dans App.jsx).

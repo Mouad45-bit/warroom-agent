@@ -3,6 +3,8 @@ package com.warroom.server.service;
 import com.warroom.server.dto.LoginRequest;
 import com.warroom.server.dto.UserResponse;
 import com.warroom.server.entity.User;
+import com.warroom.server.model.AuditAction;
+import com.warroom.server.model.AuditTargetType;
 import com.warroom.server.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -29,11 +31,14 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final SessionRegistry sessionRegistry;
+    private final AuditService auditService;
 
-    public AuthService(AuthenticationManager authenticationManager, UserRepository userRepository , SessionRegistry sessionRegistry) {
+
+    public AuthService(AuthenticationManager authenticationManager, UserRepository userRepository , SessionRegistry sessionRegistry , AuditService auditService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.sessionRegistry = sessionRegistry;
+        this.auditService = auditService;
     }
 
     @Transactional(noRollbackFor = BadCredentialsException.class)
@@ -68,6 +73,10 @@ public class AuthService {
             userRepository.save(user);
 
             log.info("Connexion réussie pour l'utilisateur : {}", user.getUsername());
+
+            auditService.log(user.getId(), user.getFullName(), user.getRole().name(),
+                    AuditAction.LOGIN, AuditTargetType.SESSION,
+                    session.getId(), "Session Web", "Connexion réussie");
 
             // Remplacement de LoginResponse par UserResponse (Option A)
             return new UserResponse(
@@ -109,6 +118,11 @@ public class AuthService {
             }
 
             userRepository.save(user);
+
+            // *** NOUVEAU : MODULE 6 — AUDIT LOGIN_FAILED ***
+            auditService.log(user.getId(), user.getFullName(), user.getRole().name(),
+                    AuditAction.LOGIN_FAILED, AuditTargetType.SESSION,
+                    user.getUsername(), "Tentative de connexion", "Échec (mauvais mot de passe ou compte bloqué)");
         });
     }
 }

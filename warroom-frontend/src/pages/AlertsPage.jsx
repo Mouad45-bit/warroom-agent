@@ -42,7 +42,7 @@ import {
 import { Search, Filter, Loader2, RotateCcw } from 'lucide-react';
 
 //
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const STATUSES = ['NEW', 'ACKNOWLEDGED', 'FALSE_POSITIVE', 'ESCALATED'];

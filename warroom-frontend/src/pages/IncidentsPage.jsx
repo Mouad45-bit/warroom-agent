@@ -62,7 +62,7 @@ import {
 // true = Utilise les fausses données (pour coder l'UI)
 // false = Utilise le vrai backend Spring Boot
 // ══════════════════════════════════════════════════════════════
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 // ── Valeurs possibles pour les filtres ────────────────────
 const INCIDENT_STATUSES = ['OPEN', 'INVESTIGATING', 'REMEDIATING', 'RESOLVED', 'CLOSED', 'CLOSED_FALSE_POSITIVE'];

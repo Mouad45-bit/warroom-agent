@@ -36,7 +36,7 @@ import {
 // true = Utilise les fausses données (pour coder l'UI)
 // false = Utilise le vrai backend Spring Boot
 // ══════════════════════════════════════════════════════════════
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 export default function UsersPage() {
     const { user: currentUser } = useAuth();

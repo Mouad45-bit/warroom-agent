@@ -16,7 +16,7 @@ import {
 } from '../api/mock/mockAgents.js';
 import { Loader2, MonitorCheck } from 'lucide-react';
 
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 // ── Constantes pour la liste ─────────────────────────────────
 const HEALTH_COLORS = {
