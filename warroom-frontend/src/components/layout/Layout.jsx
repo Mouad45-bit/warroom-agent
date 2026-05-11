@@ -14,6 +14,7 @@
 
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import NotificationDropdown from '../NotificationDropdown.jsx';
 import {
     LayoutDashboard,
     ShieldAlert,
@@ -97,6 +98,10 @@ export default function Layout() {
                         <h1 className="text-xl font-bold text-gray-900 leading-tight">Vigilix</h1>
                         <p className="text-xs text-gray-400 leading-none">SOC Platform</p>
                     </div>
+                </div>
+
+                <div className="px-3 py-4 border-b border-gray-100">
+                    <NotificationDropdown />
                 </div>
 
                 {/* ── Navigation ────────────────────────────────── */}
