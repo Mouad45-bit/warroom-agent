@@ -49,4 +49,4 @@ __pycache__/
 venv/
 
 ##
-.env
+warroom-frontend/.env
