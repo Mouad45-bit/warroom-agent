@@ -60,6 +60,7 @@ const entries = [
     { id: 50, userId: 5, userFullName: 'Manager SOC', userRole: 'MANAGER', actionType: 'LOGOUT', targetType: 'SESSION', targetId: '5', targetLabel: 'manager', details: null, createdAt: '2026-05-09T15:30:00Z' },
     { id: 51, userId: 2, userFullName: 'Mouad Lahlou', userRole: 'L1', actionType: 'ALERT_ESCALATED', targetType: 'ALERT', targetId: '25', targetLabel: 'AUTH-SSH-ROOT', details: null, createdAt: '2026-05-09T14:50:00Z' },
     { id: 52, userId: 2, userFullName: 'Mouad Lahlou', userRole: 'L1', actionType: 'INCIDENT_CREATED', targetType: 'INCIDENT', targetId: '4', targetLabel: 'INC-0004', details: 'Connexion SSH root depuis IP inconnue', createdAt: '2026-05-09T14:50:01Z' },
+    { id: 53, userId: 1, userFullName: 'Admin Principal', userRole: 'ADMIN', actionType: 'USER_ENABLED', targetType: 'USER', targetId: '6', targetLabel: 'newuser.l1', details: null, createdAt: '2026-05-09T15:40:00Z' },
 ];
 
 // ══════════════════════════════════════════════════════════════

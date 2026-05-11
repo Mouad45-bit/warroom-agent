@@ -9,6 +9,7 @@
 //  Fonctionnalités :
 //    - Lister les comptes (GET /api/admin/users)
 //    - Créer un compte (POST /api/admin/users)
+//    - Activer un compte (PUT /api/admin/users/{id}/enable)
 //    - Désactiver un compte (PUT /api/admin/users/{id}/disable)
 //
 //  Contraintes de rôle :
@@ -24,7 +25,7 @@ import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import CreateUserModal from '../components/modals/users/CreateUserModal.jsx';
 import ConfirmModal from "../components/modals/ConfirmModal.jsx";
-import { mockGetUsers, mockDisableUser } from '../api/mock/mockAuth.js';
+import { mockGetUsers, mockDisableUser, mockEnableUser } from '../api/mock/mockAuth.js';
 import {
     UserPlus,
     Loader2,

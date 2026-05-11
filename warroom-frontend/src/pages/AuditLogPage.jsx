@@ -57,6 +57,7 @@ const ACTION_LABELS = {
     AGENT_CONFIG_CHANGED:           'A modifié la config agent',
     USER_CREATED:                   'A créé un compte',
     USER_DISABLED:                  'A désactivé un compte',
+    USER_ENABLED:                   'A activé un compte',
 };
 
 // ── Couleur du badge de rôle ─────────────────────────────────
