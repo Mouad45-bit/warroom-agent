@@ -27,7 +27,7 @@
 //    - isL1            : booléen (affiche les boutons d'action si true)
 //    - onClose         : () => void
 //    - onNavigate      : (alertId) => void — charge une autre alerte
-//    - onAcknowledge   : (alertId) => void — ouvre la ConfirmModal
+//    - onAcknowledge   : (alertId) => void — action d’acquittement
 //    - onFalsePositive : (alertId) => void — ouvre la FalsePositiveModal
 // ══════════════════════════════════════════════════════════════
 
