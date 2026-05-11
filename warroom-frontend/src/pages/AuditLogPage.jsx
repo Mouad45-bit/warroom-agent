@@ -17,14 +17,14 @@
 //    GET /api/admin/audit-log → MANAGER, ADMIN
 // ══════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {useState, useEffect, useCallback} from 'react';
+import {useNavigate} from 'react-router-dom';
 import api from '../api/client';
 import {
     mockGetAuditLog,
     mockGetAuditUsers,
 } from '../api/mock/mockAuditLog.js';
-import { appConfig } from '../config/appConfig.js';
+import {appConfig} from '../config/appConfig.js';
 import Pagination from '../components/ui/Pagination.jsx';
 import {
     Loader2,
@@ -40,31 +40,31 @@ const PAGE_SIZE = appConfig.pagination.auditLogPageSize;
 //  MAPPING actionType → label affiché en français
 // ══════════════════════════════════════════════════════════════
 const ACTION_LABELS = {
-    LOGIN:                          'Connexion',
-    LOGOUT:                         'Déconnexion',
-    LOGIN_FAILED:                   'Tentative échouée',
-    ALERT_ACKNOWLEDGED:             'A acquitté une alerte',
-    ALERT_FALSE_POSITIVE:           'A qualifié en faux positif',
-    ALERT_ESCALATED:                'A escaladé en incident',
-    INCIDENT_CREATED:               'A créé un incident',
-    INCIDENT_TAKEN:                 'A pris en charge',
-    INCIDENT_STATUS_CHANGED:        'A changé le statut',
-    INCIDENT_COUNTERMEASURE_ADDED:  'A ajouté une contre-mesure',
-    INCIDENT_NOTE_ADDED:            'A ajouté une note',
-    INCIDENT_REASSIGNED:            'A réassigné l\'incident',
-    INCIDENT_RETURNED:              'A renvoyé au L1',
-    INCIDENT_CLOSED:                'A clôturé l\'incident',
-    AGENT_CONFIG_CHANGED:           'A modifié la config agent',
-    USER_CREATED:                   'A créé un compte',
-    USER_DISABLED:                  'A désactivé un compte',
+    LOGIN: 'Connexion',
+    LOGOUT: 'Déconnexion',
+    LOGIN_FAILED: 'Tentative échouée',
+    ALERT_ACKNOWLEDGED: 'A acquitté une alerte',
+    ALERT_FALSE_POSITIVE: 'A qualifié en faux positif',
+    ALERT_ESCALATED: 'A escaladé en incident',
+    INCIDENT_CREATED: 'A créé un incident',
+    INCIDENT_TAKEN: 'A pris en charge',
+    INCIDENT_STATUS_CHANGED: 'A changé le statut',
+    INCIDENT_COUNTERMEASURE_ADDED: 'A ajouté une contre-mesure',
+    INCIDENT_NOTE_ADDED: 'A ajouté une note',
+    INCIDENT_REASSIGNED: 'A réassigné l\'incident',
+    INCIDENT_RETURNED: 'A renvoyé au L1',
+    INCIDENT_CLOSED: 'A clôturé l\'incident',
+    AGENT_CONFIG_CHANGED: 'A modifié la config agent',
+    USER_CREATED: 'A créé un compte',
+    USER_DISABLED: 'A désactivé un compte',
 };
 
 // ── Couleur du badge de rôle ─────────────────────────────────
 const ROLE_BADGE = {
-    L1:      'bg-blue-100 text-blue-700',
-    L2:      'bg-purple-100 text-purple-700',
+    L1: 'bg-blue-100 text-blue-700',
+    L2: 'bg-purple-100 text-purple-700',
     MANAGER: 'bg-amber-100 text-amber-700',
-    ADMIN:   'bg-brand-50 text-brand-600',
+    ADMIN: 'bg-brand-50 text-brand-600',
 };
 
 // ── Types d'action groupés pour le filtre dropdown ───────────
@@ -145,11 +145,13 @@ export default function AuditLogPage() {
         setLoadingList(false);
     }, [page, filters]);
 
-    useEffect(() => { fetchEntries(); }, [fetchEntries]);
+    useEffect(() => {
+        fetchEntries();
+    }, [fetchEntries]);
 
     // ── Réinitialiser les filtres ────────────────────────────
     const resetFilters = () => {
-        setFilters({ userId: '', actionType: '', from: '', to: '' });
+        setFilters({userId: '', actionType: '', from: '', to: ''});
         setPage(0);
     };
 
@@ -168,7 +170,7 @@ export default function AuditLogPage() {
     //  RENDU
     // ══════════════════════════════════════════════════════════
     return (
-        <div className="p-8">
+        <div className="p-4 sm:p-5 lg:p-6">
 
             {/* ── Header ─────────────────────────────────────── */}
             <div className="flex items-center justify-between mb-6">
@@ -181,7 +183,7 @@ export default function AuditLogPage() {
                             onClick={resetFilters}
                             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
                         >
-                            <RotateCcw className="w-3 h-3" />
+                            <RotateCcw className="w-3 h-3"/>
                             Réinitialiser
                         </button>
                     )}
@@ -193,7 +195,7 @@ export default function AuditLogPage() {
                                 : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                         }`}
                     >
-                        <Filter className="w-3 h-3" />
+                        <Filter className="w-3 h-3"/>
                         Filtres
                     </button>
                 </div>
@@ -204,12 +206,16 @@ export default function AuditLogPage() {
                 <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
                     {/* Par utilisateur */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
+                        <label
+                            className={`block ${appConfig.text.minLabelClass} font-medium text-gray-400 uppercase mb-1`}>
                             Utilisateur
                         </label>
                         <select
                             value={filters.userId}
-                            onChange={e => { setFilters(prev => ({ ...prev, userId: e.target.value })); setPage(0); }}
+                            onChange={e => {
+                                setFilters(prev => ({...prev, userId: e.target.value}));
+                                setPage(0);
+                            }}
                             className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                         >
                             <option value="">Tous</option>
@@ -223,12 +229,16 @@ export default function AuditLogPage() {
 
                     {/* Par type d'action */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
+                        <label
+                            className={`block ${appConfig.text.minLabelClass} font-medium text-gray-400 uppercase mb-1`}>
                             Action
                         </label>
                         <select
                             value={filters.actionType}
-                            onChange={e => { setFilters(prev => ({ ...prev, actionType: e.target.value })); setPage(0); }}
+                            onChange={e => {
+                                setFilters(prev => ({...prev, actionType: e.target.value}));
+                                setPage(0);
+                            }}
                             className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                         >
                             <option value="">Toutes</option>
@@ -242,26 +252,34 @@ export default function AuditLogPage() {
 
                     {/* Date début */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
+                        <label
+                            className={`block ${appConfig.text.minLabelClass} font-medium text-gray-400 uppercase mb-1`}>
                             Depuis
                         </label>
                         <input
                             type="datetime-local"
                             value={filters.from}
-                            onChange={e => { setFilters(prev => ({ ...prev, from: e.target.value })); setPage(0); }}
+                            onChange={e => {
+                                setFilters(prev => ({...prev, from: e.target.value}));
+                                setPage(0);
+                            }}
                             className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                         />
                     </div>
 
                     {/* Date fin */}
                     <div>
-                        <label className="block text-[10px] font-medium text-gray-400 uppercase mb-1">
+                        <label
+                            className={`block ${appConfig.text.minLabelClass} font-medium text-gray-400 uppercase mb-1`}>
                             Jusqu'à
                         </label>
                         <input
                             type="datetime-local"
                             value={filters.to}
-                            onChange={e => { setFilters(prev => ({ ...prev, to: e.target.value })); setPage(0); }}
+                            onChange={e => {
+                                setFilters(prev => ({...prev, to: e.target.value}));
+                                setPage(0);
+                            }}
                             className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
                         />
                     </div>
@@ -272,91 +290,94 @@ export default function AuditLogPage() {
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                 {loadingList ? (
                     <div className="flex items-center justify-center py-16">
-                        <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                        <Loader2 className="w-6 h-6 animate-spin text-brand-600"/>
                     </div>
                 ) : entries.length === 0 ? (
                     <div className="flex flex-col items-center py-16 text-gray-400">
-                        <ScrollText className="w-8 h-8 mb-2" />
+                        <ScrollText className="w-8 h-8 mb-2"/>
                         <p className="text-sm">Aucune entrée trouvée.</p>
                     </div>
                 ) : (
                     <>
-                        <table className="w-full text-sm">
-                            <thead>
-                            <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                                <th className="px-6 py-4">Horodatage</th>
-                                <th className="px-6 py-4">Utilisateur</th>
-                                <th className="px-6 py-4">Action</th>
-                                <th className="px-6 py-4">Cible</th>
-                                <th className="px-6 py-4">Détails</th>
-                            </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                            {entries.map(entry => {
-                                const roleBadge = ROLE_BADGE[entry.userRole] || 'bg-gray-100 text-gray-500';
-                                const canNavigate = entry.targetType !== 'SESSION';
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[960px] text-sm">
+                                <thead>
+                                <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                    <th className="px-6 py-4">Horodatage</th>
+                                    <th className="px-6 py-4">Utilisateur</th>
+                                    <th className="px-6 py-4">Action</th>
+                                    <th className="px-6 py-4">Cible</th>
+                                    <th className="px-6 py-4">Détails</th>
+                                </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                {entries.map(entry => {
+                                    const roleBadge = ROLE_BADGE[entry.userRole] || 'bg-gray-100 text-gray-500';
+                                    const canNavigate = entry.targetType !== 'SESSION';
 
-                                return (
-                                    <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
-                                        {/* Horodatage */}
-                                        <td className="px-6 py-3 text-xs text-gray-500 whitespace-nowrap">
-                                            {new Date(entry.createdAt).toLocaleString('fr-FR', {
-                                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                                hour: '2-digit', minute: '2-digit', second: '2-digit',
-                                            })}
-                                        </td>
+                                    return (
+                                        <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
+                                            {/* Horodatage */}
+                                            <td className="px-6 py-3 text-xs text-gray-500 whitespace-nowrap">
+                                                {new Date(entry.createdAt).toLocaleString('fr-FR', {
+                                                    day: '2-digit', month: '2-digit', year: 'numeric',
+                                                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                                })}
+                                            </td>
 
-                                        {/* Utilisateur + badge rôle */}
-                                        <td className="px-6 py-3">
-                                            <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-medium text-gray-900">
-                                                        {entry.userFullName}
-                                                    </span>
-                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${roleBadge}`}>
-                                                        {entry.userRole}
-                                                    </span>
-                                            </div>
-                                        </td>
+                                            {/* Utilisateur + badge rôle */}
+                                            <td className="px-6 py-3">
+                                                <div className="flex items-center gap-2">
+                                                <span className="text-xs font-medium text-gray-900">
+                                                    {entry.userFullName}
+                                                </span>
+                                                    <span
+                                                        className={`px-2 py-0.5 rounded ${appConfig.text.minMetaClass} font-bold uppercase ${roleBadge}`}>
+                                                    {entry.userRole}
+                                                </span>
+                                                </div>
+                                            </td>
 
-                                        {/* Action (label français) */}
-                                        <td className="px-6 py-3 text-xs text-gray-700">
-                                            {ACTION_LABELS[entry.actionType] || entry.actionType}
-                                        </td>
+                                            {/* Action (label français) */}
+                                            <td className="px-6 py-3 text-xs text-gray-700">
+                                                {ACTION_LABELS[entry.actionType] || entry.actionType}
+                                            </td>
 
-                                        {/* Cible (cliquable si pertinent) */}
-                                        <td className="px-6 py-3">
-                                            {canNavigate ? (
-                                                <button
-                                                    onClick={() => navigateToTarget(entry)}
-                                                    className="text-xs text-brand-600 font-medium hover:underline cursor-pointer"
-                                                >
-                                                    {entry.targetLabel || '—'}
-                                                </button>
-                                            ) : (
-                                                <span className="text-xs text-gray-400">
+                                            {/* Cible (cliquable si pertinent) */}
+                                            <td className="px-6 py-3">
+                                                {canNavigate ? (
+                                                    <button
+                                                        onClick={() => navigateToTarget(entry)}
+                                                        className="text-xs text-brand-600 font-medium hover:underline cursor-pointer"
+                                                    >
+                                                        {entry.targetLabel || '—'}
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400">
                                                         {entry.targetLabel || '—'}
                                                     </span>
-                                            )}
-                                        </td>
+                                                )}
+                                            </td>
 
-                                        {/* Détails (troncature) */}
-                                        <td className="px-6 py-3">
-                                            {entry.details ? (
-                                                <span
-                                                    className="text-xs text-gray-400 truncate block max-w-[200px]"
-                                                    title={entry.details}
-                                                >
+                                            {/* Détails (troncature) */}
+                                            <td className="px-6 py-3">
+                                                {entry.details ? (
+                                                    <span
+                                                        className="text-xs text-gray-400 truncate block max-w-[200px]"
+                                                        title={entry.details}
+                                                    >
                                                         {entry.details}
                                                     </span>
-                                            ) : (
-                                                <span className="text-xs text-gray-300">—</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            </tbody>
-                        </table>
+                                                ) : (
+                                                    <span className="text-xs text-gray-300">—</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                </tbody>
+                            </table>
+                        </div>
 
                         {/* Pagination */}
                         <div className="px-6 py-3">

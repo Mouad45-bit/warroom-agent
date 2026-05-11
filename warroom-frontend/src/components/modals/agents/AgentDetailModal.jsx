@@ -13,6 +13,7 @@ import {
     RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
+import { appConfig } from '../../../config/appConfig.js';
 
 // ── Constantes locales à la modale ──────────────────────────
 const HEALTH_COLORS = {
@@ -65,7 +66,7 @@ function HeartbeatChart({ history }) {
                 <div className="absolute inset-x-3 top-3 bottom-6 flex flex-col justify-between pointer-events-none">
                     {[0, 1, 2, 3].map(i => (
                         <div key={i} className="flex items-center gap-2 w-full">
-                            <span className="text-[9px] text-gray-300 w-6 text-right shrink-0">
+                            <span className={`${appConfig.text.minMetaClass} text-gray-300 w-6 text-right shrink-0`}>
                                 {Math.round(maxQ * (1 - i / 3))}
                             </span>
                             <div className="flex-1 border-t border-dashed border-gray-200" />
@@ -82,7 +83,7 @@ function HeartbeatChart({ history }) {
 
                         // Logique : si 0, hauteur presque invisible. Si > 0, au moins 8% pour qu'on le distingue bien du zéro.
                         const displayPct = hb.queuedEvents === 0 ? 0 : Math.max(pct, 8);
-                        const minH = hb.queuedEvents === 0 ? '4px' : '10px';
+                        const minH = hb.queuedEvents === 0 ? '4px' : `${appConfig.text.minMetaClass}`;
 
                         return (
                             <div
@@ -97,7 +98,7 @@ function HeartbeatChart({ history }) {
                                     className="w-full rounded-t-sm transition-all duration-150 relative flex justify-center"
                                     style={{
                                         height: `${displayPct}%`,
-                                        minHeight: minH,  // ← 4px pour 0, 10px minimum pour le reste
+                                        minHeight: minH,  // ← 4px pour 0, minimum pour le reste
                                         backgroundColor: colors.bar,
                                         opacity: isHovered ? 1 : 0.75,
                                         boxShadow: isHovered ? `0 0 8px ${colors.glow}` : 'none',
@@ -106,7 +107,7 @@ function HeartbeatChart({ history }) {
                                     {/* Tooltip au survol */}
                                     {isHovered && (
                                         <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
-                                            <div className="bg-gray-800 text-white text-[10px] font-medium px-2 py-1 rounded-lg shadow-lg">
+                                            <div className={`bg-gray-800 text-white ${appConfig.text.minMetaClass} font-medium px-2 py-1 rounded-lg shadow-lg`}>
                                                 {hb.queuedEvents} evt
                                                 <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800" />
                                             </div>
@@ -120,8 +121,8 @@ function HeartbeatChart({ history }) {
 
                 {/* Légende de temps */}
                 <div className="flex justify-between ml-8 mt-1.5">
-                    <span className="text-[9px] text-gray-400">-10min</span>
-                    <span className="text-[9px] text-gray-400">maintenant</span>
+                    <span className={`${appConfig.text.minMetaClass} text-gray-400`}>-10min</span>
+                    <span className={`${appConfig.text.minMetaClass} text-gray-400`}>maintenant</span>
                 </div>
             </div>
 
@@ -134,7 +135,7 @@ function HeartbeatChart({ history }) {
                 ].map(l => (
                     <div key={l.label} className="flex items-center gap-1">
                         <span className={`w-2 h-2 rounded-full ${l.color}`} />
-                        <span className="text-[10px] text-gray-400">{l.label}</span>
+                        <span className={`${appConfig.text.minMetaClass} text-gray-400`}>{l.label}</span>
                     </div>
                 ))}
             </div>
@@ -155,7 +156,7 @@ export default function AgentDetailModal
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-            <div className="w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-xl flex flex-col">
+            <div className="w-full max-w-3xl max-h-[88vh] bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
@@ -183,7 +184,7 @@ export default function AgentDetailModal
                 </div>
 
                 {/* Contenu scrollable */}
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-5 lg:px-6 py-4 space-y-5">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
@@ -191,7 +192,7 @@ export default function AgentDetailModal
                     ) : agentDetail ? (
                         <>
                             {/* Infos générales */}
-                            <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                                 {[
                                     ['OS', `${agentDetail.agent.osName} ${agentDetail.agent.osVersion}`],
                                     ['Version agent', agentDetail.agent.agentVersion],
@@ -239,17 +240,17 @@ export default function AgentDetailModal
                                                     <p className={`text-xs font-medium ${isRunning ? 'text-green-800' : 'text-red-700'}`}>
                                                         {comp.name}
                                                     </p>
-                                                    <p className={`text-[10px] ${isRunning ? 'text-green-600' : 'text-red-500'} truncate`}>
+                                                    <p className={`${appConfig.text.minMetaClass} ${isRunning ? 'text-green-600' : 'text-red-500'} truncate`}>
                                                         {comp.statusMessage}
                                                     </p>
                                                 </div>
                                                 {comp.restartCount > 0 && (
-                                                    <span className="flex items-center gap-1 text-[10px] text-gray-400" title="Redémarrages">
+                                                    <span className={`flex items-center gap-1 ${appConfig.text.minMetaClass} text-gray-400`} title="Redémarrages">
                                                         <RefreshCw className="w-3 h-3" />
                                                         {comp.restartCount}
                                                     </span>
                                                 )}
-                                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${isRunning ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                                <span className={`${appConfig.text.minMetaClass} font-medium px-1.5 py-0.5 rounded ${isRunning ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                                                     {comp.status}
                                                 </span>
                                             </div>
@@ -271,7 +272,7 @@ export default function AgentDetailModal
                                         ['Événements perdus', agentDetail.latestHealth.droppedEvents, agentDetail.latestHealth.droppedEvents > 0 ? 'text-red-700 bg-red-50' : 'text-gray-700 bg-gray-50'],
                                     ].map(([label, value, cls]) => (
                                         <div key={label} className={`p-2.5 rounded-lg ${cls.split(' ').slice(1).join(' ')}`}>
-                                            <p className="text-[10px] text-gray-400 uppercase">{label}</p>
+                                            <p className={`${appConfig.text.minMetaClass} text-gray-400 uppercase`}>{label}</p>
                                             <p className={`text-lg font-bold ${cls.split(' ')[0]}`}>{value}</p>
                                         </div>
                                     ))}

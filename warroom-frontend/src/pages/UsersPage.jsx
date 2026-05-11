@@ -18,12 +18,12 @@
 //    - MANAGER ne peut activer/désactiver que [L1, L2]
 // ══════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import {useState, useEffect, useCallback} from 'react';
 import api from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import {useAuth} from '../context/AuthContext';
 import CreateUserModal from '../components/modals/users/CreateUserModal.jsx';
 import ConfirmModal from "../components/modals/ConfirmModal.jsx";
-import { appConfig } from '../config/appConfig.js';
+import {appConfig} from '../config/appConfig.js';
 import {
     mockGetUsers,
     mockDisableUser,
@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 
 export default function UsersPage() {
-    const { user: currentUser } = useAuth();
+    const {user: currentUser} = useAuth();
 
     // ── État ────────────────────────────────────────────────
     const [users, setUsers] = useState([]);
@@ -103,10 +103,10 @@ export default function UsersPage() {
 
     // ── Exécution de l'action confirmée ─────────────────────
     const executeAction = async () => {
-        const { userId, actionType } = confirmDialog;
+        const {userId, actionType} = confirmDialog;
 
         // Fermer la modale immédiatement
-        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        setConfirmDialog({...confirmDialog, isOpen: false});
 
         try {
             if (actionType === 'disable') {
@@ -143,7 +143,7 @@ export default function UsersPage() {
             : ['L1', 'L2', 'MANAGER', 'ADMIN'];
 
     return (
-        <div className="p-8">
+        <div className="p-4 sm:p-5 lg:p-6">
             {/* ── Header de page ──────────────────────────────── */}
             <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -153,7 +153,7 @@ export default function UsersPage() {
                     onClick={() => setShowCreateModal(true)}
                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors cursor-pointer"
                 >
-                    <UserPlus className="w-4 h-4" />
+                    <UserPlus className="w-4 h-4"/>
                     Créer un compte
                 </button>
             </div>
@@ -162,94 +162,100 @@ export default function UsersPage() {
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                 {loadingList ? (
                     <div className="flex items-center justify-center py-16">
-                        <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                        <Loader2 className="w-6 h-6 animate-spin text-brand-600"/>
                     </div>
                 ) : (
-                    <table className="w-full text-sm">
-                        <thead>
-                        <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                            <th className="px-6 py-4">Utilisateur</th>
-                            <th className="px-6 py-4 text-center">Rôle</th>
-                            <th className="px-6 py-4">Email</th>
-                            <th className="px-6 py-4">Statut</th>
-                            <th className="px-6 py-4">Dernière connexion</th>
-                            <th className="px-6 py-4">Actions</th>
-                        </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                        {users.map((u) => (
-                            <tr key={u.userId} className="hover:bg-gray-50/50 transition-colors">
-                                {/* Nom + username */}
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-semibold text-xs">
-                                            {u.fullName?.charAt(0)}
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[900px] text-sm">
+                            <thead>
+                            <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                <th className="px-6 py-4">Utilisateur</th>
+                                <th className="px-6 py-4 text-center">Rôle</th>
+                                <th className="px-6 py-4">Email</th>
+                                <th className="px-6 py-4">Statut</th>
+                                <th className="px-6 py-4">Dernière connexion</th>
+                                <th className="px-6 py-4">Actions</th>
+                            </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                            {users.map((u) => (
+                                <tr key={u.userId} className="hover:bg-gray-50/50 transition-colors">
+                                    {/* Nom + username */}
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div
+                                                className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-semibold text-xs">
+                                                {u.fullName?.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-gray-900">{u.fullName}</p>
+                                                <p className="text-gray-400 text-xs">{u.username}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-medium text-gray-900">{u.fullName}</p>
-                                            <p className="text-gray-400 text-xs">{u.username}</p>
-                                        </div>
-                                    </div>
-                                </td>
+                                    </td>
 
-                                {/* Rôle */}
-                                <td className="px-6 py-4 text-center uppercase">
-                                    <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-600">
+                                    {/* Rôle */}
+                                    <td className="px-6 py-4 text-center uppercase">
+                                    <span
+                                        className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-600">
                                       {u.role}
                                     </span>
-                                </td>
+                                    </td>
 
-                                {/* Email */}
-                                <td className="px-6 py-4 text-gray-500">
-                                    {u.email || '—'}
-                                </td>
+                                    {/* Email */}
+                                    <td className="px-6 py-4 text-gray-500">
+                                        {u.email || '—'}
+                                    </td>
 
-                                {/* Statut actif/inactif */}
-                                <td className="px-6 py-4">
-                                    {u.active ? (
-                                        <span className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
-                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                    {/* Statut actif/inactif */}
+                                    <td className="px-6 py-4">
+                                        {u.active ? (
+                                            <span
+                                                className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
+                                            <CheckCircle2 className="w-3.5 h-3.5"/>
                                             Actif
                                         </span>
-                                    ) : (
-                                        <span className="inline-flex items-center gap-1 text-gray-400 text-xs font-medium">
-                                            <ShieldOff className="w-3.5 h-3.5" />
+                                        ) : (
+                                            <span
+                                                className="inline-flex items-center gap-1 text-gray-400 text-xs font-medium">
+                                            <ShieldOff className="w-3.5 h-3.5"/>
                                             Inactif
                                         </span>
-                                    )}
-                                </td>
+                                        )}
+                                    </td>
 
-                                {/* Dernière connexion */}
-                                <td className="px-6 py-4 text-gray-500">
-                                    {u.lastLoginAt
-                                        ? new Date(u.lastLoginAt).toLocaleString('fr-FR')
-                                        : 'Jamais'}
-                                </td>
+                                    {/* Dernière connexion */}
+                                    <td className="px-6 py-4 text-gray-500">
+                                        {u.lastLoginAt
+                                            ? new Date(u.lastLoginAt).toLocaleString('fr-FR')
+                                            : 'Jamais'}
+                                    </td>
 
-                                {/* Actions */}
-                                <td className="px-6 py-4 text-left">
-                                    {canToggleStatus(u.role) && (
-                                        u.active ? (
-                                            <button
-                                                onClick={() => requestDisable(u.userId)}
-                                                className="text-xs font-medium text-red-600 hover:text-red-700 hover:underline transition-colors cursor-pointer"
-                                            >
-                                                Désactiver
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => requestEnable(u.userId)}
-                                                className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline transition-colors cursor-pointer"
-                                            >
-                                                Activer
-                                            </button>
-                                        )
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
+                                    {/* Actions */}
+                                    <td className="px-6 py-4 text-left">
+                                        {canToggleStatus(u.role) && (
+                                            u.active ? (
+                                                <button
+                                                    onClick={() => requestDisable(u.userId)}
+                                                    className="text-xs font-medium text-red-600 hover:text-red-700 hover:underline transition-colors cursor-pointer"
+                                                >
+                                                    Désactiver
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => requestEnable(u.userId)}
+                                                    className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline transition-colors cursor-pointer"
+                                                >
+                                                    Activer
+                                                </button>
+                                            )
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -274,7 +280,7 @@ export default function UsersPage() {
                 message={confirmDialog.message}
                 type={confirmDialog.type}
                 confirmText={confirmDialog.confirmText}
-                onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+                onClose={() => setConfirmDialog({...confirmDialog, isOpen: false})}
                 onConfirm={executeAction}
             />
         </div>

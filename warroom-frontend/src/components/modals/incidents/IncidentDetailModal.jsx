@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AlertSeverityBadge from '../../ui/alerts/AlertSeverityBadge.jsx';
 import IncidentStatusBadge from '../../ui/incidents/IncidentStatusBadge.jsx';
+import { appConfig } from '../../../config/appConfig.js';
 import {
     X,
     Loader2,
@@ -52,7 +53,7 @@ function RoleBadge({ role }) {
         ADMIN: 'bg-gray-100 text-gray-600',
     };
     return (
-        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${styles[role] || styles.L1}`}>
+        <span className={`inline-flex px-1.5 py-0.5 rounded ${appConfig.text.minMetaClass} font-semibold uppercase ${styles[role] || styles.L1}`}>
             {role}
         </span>
     );
@@ -106,7 +107,7 @@ export default function IncidentDetailModal
 
     return (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-            <div className="w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden">
+            <div className="w-full max-w-3xl max-h-[88vh] bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden">
 
                 {/* ════════════════════════════════════════════
                     HEADER — fixe en haut de la modale
@@ -168,7 +169,7 @@ export default function IncidentDetailModal
                 {/* ════════════════════════════════════════════
                     BODY — scrollable (Superposition via CSS Grid)
                     ════════════════════════════════════════════ */}
-                <div className="flex-1 overflow-y-auto p-6 relative">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 relative">
                     {loading ? (
                         <div className="flex items-center justify-center py-20">
                             <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
@@ -369,7 +370,7 @@ export default function IncidentDetailModal
                                                             )}
 
                                                             {entry.countermeasureType && (
-                                                                <span className="inline-flex mt-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-600">
+                                                                <span className={`inline-flex mt-1.5 px-2 py-0.5 rounded ${appConfig.text.minMetaClass} font-medium bg-orange-50 text-orange-600`}>
                                                                     {entry.countermeasureType.replace(/_/g, ' ')}
                                                                 </span>
                                                             )}

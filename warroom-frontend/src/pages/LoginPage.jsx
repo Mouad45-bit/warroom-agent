@@ -77,7 +77,7 @@ export default function LoginPage() {
                 </div>
 
                 {/* ── Carte du formulaire ──────────────────────── */}
-                <div className="bg-white rounded-2xl shadow-sm p-8">
+                <div className="bg-white rounded-2xl shadow-sm p-5 sm:p-6 lg:p-8">
                     {/* ── Message d'erreur ────────────────────────── */}
                     {error && (
                         <div

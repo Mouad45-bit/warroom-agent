@@ -4,24 +4,24 @@
 //  SUPERVISION DES AGENTS — Module 5
 // ══════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import {useState, useEffect, useCallback} from 'react';
 import api from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import {useAuth} from '../context/AuthContext';
 import AgentConfigModal from '../components/modals/agents/AgentConfigModal.jsx';
 import AgentDetailModal from '../components/modals/agents/AgentDetailModal.jsx';
-import { appConfig } from '../config/appConfig.js';
+import {appConfig} from '../config/appConfig.js';
 import {
     mockGetAgents,
     mockGetAgentDetail,
     mockUpdateAgentConfig,
 } from '../api/mock/mockAgents.js';
-import { Loader2, MonitorCheck } from 'lucide-react';
+import {Loader2, MonitorCheck} from 'lucide-react';
 
 // ── Constantes pour la liste ─────────────────────────────────
 const HEALTH_COLORS = {
-    GREEN:  { dot: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50',  label: 'Connecté' },
-    ORANGE: { dot: 'bg-amber-500',  text: 'text-amber-700',  bg: 'bg-amber-50',  label: 'Dégradé' },
-    RED:    { dot: 'bg-red-500',    text: 'text-red-700',    bg: 'bg-red-50',    label: 'Déconnecté' },
+    GREEN: {dot: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50', label: 'Connecté'},
+    ORANGE: {dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', label: 'Dégradé'},
+    RED: {dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', label: 'Déconnecté'},
 };
 
 function timeAgo(isoDate) {
@@ -34,7 +34,7 @@ function timeAgo(isoDate) {
 }
 
 export default function AgentsPage() {
-    const { user } = useAuth();
+    const {user} = useAuth();
     const isAdmin = user?.role === 'ADMIN';
 
     // ── Liste
@@ -47,7 +47,7 @@ export default function AgentsPage() {
     const [loadingDetail, setLoadingDetail] = useState(false);
 
     // ── Config (modale)
-    const [configModal, setConfigModal] = useState({ isOpen: false });
+    const [configModal, setConfigModal] = useState({isOpen: false});
     const [configSubmitting, setConfigSubmitting] = useState(false);
     const [configError, setConfigError] = useState(null);
 
@@ -68,7 +68,9 @@ export default function AgentsPage() {
         setLoadingList(false);
     }, []);
 
-    useEffect(() => { fetchAgents(); }, [fetchAgents]);
+    useEffect(() => {
+        fetchAgents();
+    }, [fetchAgents]);
 
     // ── DÉTAIL
     const openDetail = async (agentId) => {
@@ -115,7 +117,7 @@ export default function AgentsPage() {
                     enabledCollectors: newConfig.enabledCollectors,
                 },
             }));
-            setConfigModal({ isOpen: false });
+            setConfigModal({isOpen: false});
             fetchAgents();
         } catch (err) {
             setConfigError(err.response?.data?.message || 'Erreur lors de la modification.');
@@ -124,7 +126,7 @@ export default function AgentsPage() {
     };
 
     return (
-        <div className="p-8">
+        <div className="p-4 sm:p-5 lg:p-6">
             {/* ── Header ─────────────────────────────────────── */}
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -138,62 +140,69 @@ export default function AgentsPage() {
             {/* ── Liste des agents ────────────────────────────── */}
             {loadingList ? (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                    <Loader2 className="w-6 h-6 animate-spin text-brand-600"/>
                 </div>
             ) : (
                 <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead>
-                        <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                            <th className="px-6 py-4">Agent</th>
-                            <th className="px-6 py-4">OS</th>
-                            <th className="px-6 py-4 text-center">Santé</th>
-                            <th className="px-6 py-4">Dernier heartbeat</th>
-                            <th className="px-6 py-4 text-center">Collecteurs</th>
-                        </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                        {agents.map(agent => {
-                            const h = HEALTH_COLORS[agent.healthStatus] || HEALTH_COLORS.RED;
-                            return (
-                                <tr
-                                    key={agent.agentId}
-                                    onClick={() => openDetail(agent.agentId)}
-                                    className="hover:bg-gray-50/50 transition-colors cursor-pointer"
-                                >
-                                    {/* Hostname */}
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-600">
-                                                <MonitorCheck className="w-4 h-4" />
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[840px] text-sm">
+                            <thead>
+                            <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                <th className="px-6 py-4">Agent</th>
+                                <th className="px-6 py-4">OS</th>
+                                <th className="px-6 py-4 text-center">Santé</th>
+                                <th className="px-6 py-4">Dernier heartbeat</th>
+                                <th className="px-6 py-4 text-center">Collecteurs</th>
+                            </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                            {agents.map(agent => {
+                                const h = HEALTH_COLORS[agent.healthStatus] || HEALTH_COLORS.RED;
+                                return (
+                                    <tr
+                                        key={agent.agentId}
+                                        onClick={() => openDetail(agent.agentId)}
+                                        className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                                    >
+                                        {/* Hostname */}
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div
+                                                    className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-50 text-brand-600">
+                                                    <MonitorCheck className="w-4 h-4"/>
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-gray-900">
+                                                        {agent.hostname}
+                                                    </p>
+                                                    <p className={`${appConfig.text.minMetaClass} text-gray-400 font-mono`}>
+                                                        {agent.agentId}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-medium text-gray-900">{agent.hostname}</p>
-                                                <p className="text-[10px] text-gray-400 font-mono">{agent.agentId}</p>
-                                            </div>
-                                        </div>
-                                    </td>
+                                        </td>
 
-                                    {/* OS */}
-                                    <td className="px-6 py-4 text-gray-500">
-                                        {agent.osName} {agent.osVersion}
-                                    </td>
+                                        {/* OS */}
+                                        <td className="px-6 py-4 text-gray-500">
+                                            {agent.osName} {agent.osVersion}
+                                        </td>
 
-                                    {/* Santé */}
-                                    <td className="px-6 py-4 text-center">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${h.bg} ${h.text}`}>
-                                                <span className={`w-2 h-2 rounded-full ${h.dot}`} />
+                                        {/* Santé */}
+                                        <td className="px-6 py-4 text-center">
+                                            <span
+                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${h.bg} ${h.text}`}>
+                                                <span className={`w-2 h-2 rounded-full ${h.dot}`}/>
                                                 {h.label}
                                             </span>
-                                    </td>
+                                        </td>
 
-                                    {/* Dernier heartbeat */}
-                                    <td className="px-6 py-4 text-gray-500 text-xs">
-                                        {timeAgo(agent.lastSeenAt)}
-                                    </td>
+                                        {/* Dernier heartbeat */}
+                                        <td className="px-6 py-4 text-gray-500 text-xs">
+                                            {timeAgo(agent.lastSeenAt)}
+                                        </td>
 
-                                    {/* Collecteurs */}
-                                    <td className="px-6 py-4 text-center">
+                                        {/* Collecteurs */}
+                                        <td className="px-6 py-4 text-center">
                                             <span className={`text-xs font-medium ${
                                                 agent.activeCollectors === agent.totalCollectors
                                                     ? 'text-green-700'
@@ -203,12 +212,13 @@ export default function AgentsPage() {
                                             }`}>
                                                 {agent.activeCollectors}/{agent.totalCollectors}
                                             </span>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                        </tbody>
-                    </table>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
 
@@ -221,14 +231,14 @@ export default function AgentsPage() {
                 isAdmin={isAdmin}
                 onOpenConfig={() => {
                     setConfigError(null);
-                    setConfigModal({ isOpen: true });
+                    setConfigModal({isOpen: true});
                 }}
             />
 
             {/* ── Modale config ───────────────────────────────── */}
             <AgentConfigModal
                 isOpen={configModal.isOpen}
-                onClose={() => setConfigModal({ isOpen: false })}
+                onClose={() => setConfigModal({isOpen: false})}
                 onConfirm={handleUpdateConfig}
                 submitting={configSubmitting}
                 error={configError}

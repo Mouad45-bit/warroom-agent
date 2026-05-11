@@ -83,11 +83,11 @@ export default function Layout() {
     );
 
     return (
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex min-h-screen overflow-hidden bg-gray-50 text-gray-900">
             {/* ══════════════════════════════════════════════════════
           SIDEBAR — Fixe à gauche, fond blanc, bordure droite
           ══════════════════════════════════════════════════════ */}
-            <aside className="flex flex-col w-64 shrink-0 bg-white border-r border-gray-200">
+            <aside className="flex flex-col w-60 lg:w-64 shrink-0 bg-white border-r border-gray-200">
                 {/* ── Logo / Titre ──────────────────────────────── */}
                 <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
                     <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-brand-600">
@@ -146,7 +146,7 @@ export default function Layout() {
             {/* ══════════════════════════════════════════════════════
           CONTENU PRINCIPAL — Scrollable, fond gris clair
           ══════════════════════════════════════════════════════ */}
-            <main className="flex-1 overflow-y-auto bg-gray-50">
+            <main className="flex-1 min-w-0 overflow-y-auto bg-gray-50">
                 <Outlet />
             </main>
         </div>

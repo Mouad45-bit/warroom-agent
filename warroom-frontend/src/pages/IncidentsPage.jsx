@@ -23,9 +23,9 @@
 //  désactivé — il sera activé au Module 3.
 // ══════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import {useState, useEffect, useCallback} from 'react';
 import api from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import {useAuth} from '../context/AuthContext';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
 import IncidentStatusBadge from '../components/ui/incidents/IncidentStatusBadge.jsx';
 import Pagination from '../components/ui/Pagination.jsx';
@@ -37,7 +37,7 @@ import ReturnToL1Modal from '../components/modals/incidents/ReturnToL1Modal.jsx'
 import CloseIncidentModal from '../components/modals/incidents/CloseIncidentModal.jsx';
 import AddNoteModal from '../components/modals/incidents/AddNoteModal.jsx';
 import CountermeasureModal from '../components/modals/incidents/CountermeasureModal.jsx';
-import { appConfig } from '../config/appConfig.js';
+import {appConfig} from '../config/appConfig.js';
 import {
     mockGetIncidents,
     mockGetIncidentDetail,
@@ -64,7 +64,7 @@ const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const PAGE_SIZE = 20;
 
 export default function IncidentsPage() {
-    const { user } = useAuth();
+    const {user} = useAuth();
     const role = user?.role;
     const isL2 = role === 'L2';
     const isL1 = role === 'L1';
@@ -108,12 +108,12 @@ export default function IncidentsPage() {
     const [confirmDialog, setConfirmDialog] = useState({
         isOpen: false, title: '', message: '', type: 'success', confirmText: '',
     });
-    const [statusModal, setStatusModal] = useState({ isOpen: false });
-    const [reassignModal, setReassignModal] = useState({ isOpen: false });
-    const [returnModal, setReturnModal] = useState({ isOpen: false });
-    const [closeModal, setCloseModal] = useState({ isOpen: false });
-    const [noteModal, setNoteModal] = useState({ isOpen: false });
-    const [cmModal, setCmModal] = useState({ isOpen: false });
+    const [statusModal, setStatusModal] = useState({isOpen: false});
+    const [reassignModal, setReassignModal] = useState({isOpen: false});
+    const [returnModal, setReturnModal] = useState({isOpen: false});
+    const [closeModal, setCloseModal] = useState({isOpen: false});
+    const [noteModal, setNoteModal] = useState({isOpen: false});
+    const [cmModal, setCmModal] = useState({isOpen: false});
     const [modalSubmitting, setModalSubmitting] = useState(false);
     const [modalError, setModalError] = useState(null);
 
@@ -180,7 +180,9 @@ export default function IncidentsPage() {
         setLoadingList(false);
     }, [page, filters, viewMode, isL2, user?.userId]);
 
-    useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
+    useEffect(() => {
+        fetchIncidents();
+    }, [fetchIncidents]);
 
     // ══════════════════════════════════════════════════════════
     //  CHARGEMENT DU DÉTAIL
@@ -228,7 +230,7 @@ export default function IncidentsPage() {
     };
 
     const executeTake = async () => {
-        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setConfirmDialog(prev => ({...prev, isOpen: false}));
         try {
             if (appConfig.useMockApi) {
                 await mockTakeIncident(selectedIncidentId, user?.userId, user?.fullName);
@@ -248,7 +250,7 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     const openStatusModal = () => {
         setModalError(null);
-        setStatusModal({ isOpen: true });
+        setStatusModal({isOpen: true});
     };
 
     const handleStatusChange = async (newStatus, note) => {
@@ -258,9 +260,9 @@ export default function IncidentsPage() {
             if (appConfig.useMockApi) {
                 await mockChangeStatus(selectedIncidentId, newStatus, note);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/status`, { newStatus, note });
+                await api.put(`/api/incidents/${selectedIncidentId}/status`, {newStatus, note});
             }
-            setStatusModal({ isOpen: false });
+            setStatusModal({isOpen: false});
             await refreshDetail();
             fetchIncidents();
         } catch (err) {
@@ -274,7 +276,7 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     const openReassignModal = () => {
         setModalError(null);
-        setReassignModal({ isOpen: true });
+        setReassignModal({isOpen: true});
     };
 
     const handleReassign = async (newAssigneeUserId, note) => {
@@ -284,9 +286,9 @@ export default function IncidentsPage() {
             if (appConfig.useMockApi) {
                 await mockReassignIncident(selectedIncidentId, newAssigneeUserId, note);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/reassign`, { newAssigneeUserId, note });
+                await api.put(`/api/incidents/${selectedIncidentId}/reassign`, {newAssigneeUserId, note});
             }
-            setReassignModal({ isOpen: false });
+            setReassignModal({isOpen: false});
             await refreshDetail();
             fetchIncidents();
         } catch (err) {
@@ -300,7 +302,7 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     const openReturnModal = () => {
         setModalError(null);
-        setReturnModal({ isOpen: true });
+        setReturnModal({isOpen: true});
     };
 
     const handleReturnToL1 = async (justification) => {
@@ -310,9 +312,9 @@ export default function IncidentsPage() {
             if (appConfig.useMockApi) {
                 await mockReturnToL1(selectedIncidentId, justification);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/return-to-l1`, { justification });
+                await api.put(`/api/incidents/${selectedIncidentId}/return-to-l1`, {justification});
             }
-            setReturnModal({ isOpen: false });
+            setReturnModal({isOpen: false});
             await refreshDetail();
             fetchIncidents();
         } catch (err) {
@@ -326,7 +328,7 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     const openCloseModal = () => {
         setModalError(null);
-        setCloseModal({ isOpen: true });
+        setCloseModal({isOpen: true});
     };
 
     const handleClose = async (summary) => {
@@ -336,9 +338,9 @@ export default function IncidentsPage() {
             if (appConfig.useMockApi) {
                 await mockCloseIncident(selectedIncidentId, summary);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/close`, { summary });
+                await api.put(`/api/incidents/${selectedIncidentId}/close`, {summary});
             }
-            setCloseModal({ isOpen: false });
+            setCloseModal({isOpen: false});
             await refreshDetail();
             fetchIncidents();
         } catch (err) {
@@ -352,7 +354,7 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     const openNoteModal = () => {
         setModalError(null);
-        setNoteModal({ isOpen: true });
+        setNoteModal({isOpen: true});
     };
 
     const handleAddNote = async (content) => {
@@ -362,9 +364,9 @@ export default function IncidentsPage() {
             if (appConfig.useMockApi) {
                 await mockAddNote(selectedIncidentId, content, user?.fullName, user?.role);
             } else {
-                await api.post(`/api/incidents/${selectedIncidentId}/notes`, { content });
+                await api.post(`/api/incidents/${selectedIncidentId}/notes`, {content});
             }
-            setNoteModal({ isOpen: false });
+            setNoteModal({isOpen: false});
             await refreshDetail();
         } catch (err) {
             setModalError(err.response?.data?.message || 'Erreur lors de l\'ajout de la note.');
@@ -377,10 +379,10 @@ export default function IncidentsPage() {
     // ══════════════════════════════════════════════════════════
     const openCmModal = () => {
         setModalError(null);
-        setCmModal({ isOpen: true });
+        setCmModal({isOpen: true});
     };
 
-    const handleAddCountermeasure = async ({ type, description, technicalCommand }) => {
+    const handleAddCountermeasure = async ({type, description, technicalCommand}) => {
         setModalSubmitting(true);
         setModalError(null);
         try {
@@ -394,7 +396,7 @@ export default function IncidentsPage() {
                 result = res.data;
             }
 
-            setCmModal({ isOpen: false });
+            setCmModal({isOpen: false});
             await refreshDetail();
         } catch (err) {
             setModalError(err.response?.data?.message || 'Erreur lors de l\'ajout de la contre-mesure.');
@@ -412,13 +414,13 @@ export default function IncidentsPage() {
             const updated = current.includes(value)
                 ? current.filter(v => v !== value)
                 : [...current, value];
-            return { ...prev, [field]: updated };
+            return {...prev, [field]: updated};
         });
     };
 
     const resetFilters = () => {
         setPage(0);
-        setFilters({ status: [], severity: [], assignedTo: '' });
+        setFilters({status: [], severity: [], assignedTo: ''});
     };
 
     const hasActiveFilters =
@@ -446,7 +448,7 @@ export default function IncidentsPage() {
             {/* ════════════════════════════════════════════════
                 PARTIE GAUCHE : Liste des incidents
                 ════════════════════════════════════════════════ */}
-            <div className="flex-1 p-8 overflow-y-auto">
+            <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-5 lg:p-6">
 
                 {/* ── Header ─────────────────────────────────── */}
                 <div className="flex items-center justify-between mb-6">
@@ -458,7 +460,8 @@ export default function IncidentsPage() {
                     </div>
                     <div className="flex gap-2">
                         {isL2 && (
-                            <div className="relative flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5">
+                            <div
+                                className="relative flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-0.5">
                                 <div
                                     className="absolute top-0.5 bottom-0.5 rounded-lg bg-brand-100 shadow-sm border border-brand-200 transition-all duration-300 ease-in-out"
                                     style={{
@@ -467,7 +470,10 @@ export default function IncidentsPage() {
                                     }}
                                 />
                                 <button
-                                    onClick={() => { setViewMode('mine'); setPage(0); }}
+                                    onClick={() => {
+                                        setViewMode('mine');
+                                        setPage(0);
+                                    }}
                                     className={`relative z-10 px-3 py-[7px] text-xs font-medium rounded-lg transition-colors duration-300 cursor-pointer flex-1 text-center whitespace-nowrap ${
                                         viewMode === 'mine' ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'
                                     }`}
@@ -475,7 +481,10 @@ export default function IncidentsPage() {
                                     Mes incidents
                                 </button>
                                 <button
-                                    onClick={() => { setViewMode('all'); setPage(0); }}
+                                    onClick={() => {
+                                        setViewMode('all');
+                                        setPage(0);
+                                    }}
                                     className={`relative z-10 px-3 py-[7px] text-xs font-medium rounded-lg transition-colors duration-300 cursor-pointer flex-1 text-center whitespace-nowrap ${
                                         viewMode === 'all' ? 'text-brand-600' : 'text-gray-400 hover:text-gray-600'
                                     }`}
@@ -490,7 +499,7 @@ export default function IncidentsPage() {
                                 onClick={resetFilters}
                                 className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 rounded-xl border border-gray-200 hover:bg-gray-100 hover:text-gray-900 transition-colors cursor-pointer"
                             >
-                                <RotateCcw className="w-3.5 h-3.5" />
+                                <RotateCcw className="w-3.5 h-3.5"/>
                                 Réinitialiser
                             </button>
                         )}
@@ -502,10 +511,11 @@ export default function IncidentsPage() {
                                     : 'text-gray-700 border-gray-200 hover:bg-gray-100'
                             }`}
                         >
-                            <Filter className="w-4 h-4" />
+                            <Filter className="w-4 h-4"/>
                             Filtres
                             {hasActiveFilters && (
-                                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white text-xs">
+                                <span
+                                    className="flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white text-xs">
                                     {filters.status.length + filters.severity.length + (filters.assignedTo ? 1 : 0)}
                                 </span>
                             )}
@@ -552,62 +562,79 @@ export default function IncidentsPage() {
                 <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                     {loadingList ? (
                         <div className="flex items-center justify-center py-20">
-                            <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                            <Loader2 className="w-6 h-6 animate-spin text-brand-600"/>
                         </div>
                     ) : incidents.length === 0 ? (
                         <div className="text-center py-20 text-gray-400">
-                            <Search className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                            <Search className="w-10 h-10 mx-auto mb-3 text-gray-300"/>
                             <p className="text-sm">Aucun incident trouvé</p>
                         </div>
                     ) : (
                         <>
-                            <table className="w-full text-sm">
-                                <thead>
-                                <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                                    <th className="px-6 py-4">N°</th>
-                                    <th className="px-6 py-4 text-center">Sévérité</th>
-                                    <th className="px-6 py-4">Titre</th>
-                                    <th className="px-6 py-4 text-center">Statut</th>
-                                    <th className="px-6 py-4">Assigné à</th>
-                                    <th className="px-6 py-4">Créé le</th>
-                                    <th className="px-6 py-4">Mis à jour</th>
-                                </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                {incidents.map(inc => (
-                                    <tr key={inc.id} onClick={() => openDetail(inc.id)}
-                                        className={`cursor-pointer hover:bg-gray-50/50 transition-colors ${
-                                            selectedIncidentId === inc.id ? 'bg-brand-50/30' : ''
-                                        }`}>
-                                        <td className="px-6 py-3.5 font-mono text-xs text-brand-600 font-semibold whitespace-nowrap">
-                                            {inc.incidentNumber}
-                                        </td>
-                                        <td className="px-6 py-3.5 text-center">
-                                            <AlertSeverityBadge severity={inc.severity} />
-                                        </td>
-                                        <td className="px-6 py-3.5 text-gray-700 max-w-xs truncate font-medium">
-                                            {inc.title}
-                                        </td>
-                                        <td className="px-6 py-3.5 text-center">
-                                            <IncidentStatusBadge status={inc.status} />
-                                        </td>
-                                        <td className="px-6 py-3.5 text-gray-500">
-                                            {inc.assignedToFullName || (
-                                                <span className="text-amber-600 text-xs font-medium">Pool L2</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-3.5 text-gray-500 whitespace-nowrap">
-                                            {new Date(inc.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                        </td>
-                                        <td className="px-6 py-3.5 text-gray-400 whitespace-nowrap">
-                                            {new Date(inc.updatedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                        </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[980px] text-sm">
+                                    <thead>
+                                    <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                        <th className="px-6 py-4">N°</th>
+                                        <th className="px-6 py-4 text-center">Sévérité</th>
+                                        <th className="px-6 py-4">Titre</th>
+                                        <th className="px-6 py-4 text-center">Statut</th>
+                                        <th className="px-6 py-4">Assigné à</th>
+                                        <th className="px-6 py-4">Créé le</th>
+                                        <th className="px-6 py-4">Mis à jour</th>
                                     </tr>
-                                ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                    {incidents.map(inc => (
+                                        <tr key={inc.id} onClick={() => openDetail(inc.id)}
+                                            className={`cursor-pointer hover:bg-gray-50/50 transition-colors ${
+                                                selectedIncidentId === inc.id ? 'bg-brand-50/30' : ''
+                                            }`}>
+                                            <td className="px-6 py-3.5 font-mono text-xs text-brand-600 font-semibold whitespace-nowrap">
+                                                {inc.incidentNumber}
+                                            </td>
+                                            <td className="px-6 py-3.5 text-center">
+                                                <AlertSeverityBadge severity={inc.severity}/>
+                                            </td>
+                                            <td className="px-6 py-3.5 text-gray-700 max-w-xs truncate font-medium">
+                                                {inc.title}
+                                            </td>
+                                            <td className="px-6 py-3.5 text-center">
+                                                <IncidentStatusBadge status={inc.status}/>
+                                            </td>
+                                            <td className="px-6 py-3.5 text-gray-500">
+                                                {inc.assignedToFullName || (
+                                                    <span className="text-amber-600 text-xs font-medium">Pool L2</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-3.5 text-gray-500 whitespace-nowrap">
+                                                {new Date(inc.createdAt).toLocaleString('fr-FR', {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </td>
+                                            <td className="px-6 py-3.5 text-gray-400 whitespace-nowrap">
+                                                {new Date(inc.updatedAt).toLocaleString('fr-FR', {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    </tbody>
+                                </table>
+                            </div>
                             <div className="px-6 py-4">
-                                <Pagination page={page} totalPages={totalPages} totalElements={totalElements} onPageChange={setPage} />
+                                <Pagination
+                                    page={page}
+                                    totalPages={totalPages}
+                                    totalElements={totalElements}
+                                    onPageChange={setPage}
+                                />
                             </div>
                         </>
                     )}
@@ -652,7 +679,7 @@ export default function IncidentsPage() {
                 message={confirmDialog.message}
                 type={confirmDialog.type}
                 confirmText={confirmDialog.confirmText}
-                onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                onClose={() => setConfirmDialog(prev => ({...prev, isOpen: false}))}
                 onConfirm={executeTake}
             />
 
@@ -661,7 +688,7 @@ export default function IncidentsPage() {
                 isOpen={statusModal.isOpen}
                 currentStatus={inc?.status}
                 allowedTargets={allowedTransitions}
-                onClose={() => setStatusModal({ isOpen: false })}
+                onClose={() => setStatusModal({isOpen: false})}
                 onConfirm={handleStatusChange}
                 submitting={modalSubmitting}
                 error={modalError}
@@ -672,7 +699,7 @@ export default function IncidentsPage() {
                 isOpen={reassignModal.isOpen}
                 l2Users={l2Users}
                 currentAssigneeId={inc?.assignedToUserId}
-                onClose={() => setReassignModal({ isOpen: false })}
+                onClose={() => setReassignModal({isOpen: false})}
                 onConfirm={handleReassign}
                 submitting={modalSubmitting}
                 error={modalError}
@@ -681,7 +708,7 @@ export default function IncidentsPage() {
             {/* Renvoi au L1 */}
             <ReturnToL1Modal
                 isOpen={returnModal.isOpen}
-                onClose={() => setReturnModal({ isOpen: false })}
+                onClose={() => setReturnModal({isOpen: false})}
                 onConfirm={handleReturnToL1}
                 submitting={modalSubmitting}
                 error={modalError}
@@ -690,7 +717,7 @@ export default function IncidentsPage() {
             {/* Clôture */}
             <CloseIncidentModal
                 isOpen={closeModal.isOpen}
-                onClose={() => setCloseModal({ isOpen: false })}
+                onClose={() => setCloseModal({isOpen: false})}
                 onConfirm={handleClose}
                 submitting={modalSubmitting}
                 error={modalError}
@@ -699,7 +726,7 @@ export default function IncidentsPage() {
             {/* Note */}
             <AddNoteModal
                 isOpen={noteModal.isOpen}
-                onClose={() => setNoteModal({ isOpen: false })}
+                onClose={() => setNoteModal({isOpen: false})}
                 onConfirm={handleAddNote}
                 submitting={modalSubmitting}
                 error={modalError}
@@ -709,7 +736,7 @@ export default function IncidentsPage() {
             <CountermeasureModal
                 isOpen={cmModal.isOpen}
                 isRemediating={inc?.status === 'REMEDIATING'}
-                onClose={() => setCmModal({ isOpen: false })}
+                onClose={() => setCmModal({isOpen: false})}
                 onConfirm={handleAddCountermeasure}
                 submitting={modalSubmitting}
                 error={modalError}
