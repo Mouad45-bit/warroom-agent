@@ -25,9 +25,14 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api/client';
 import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
+import {
+    getDashboardNotifications,
+    getDashboardStats,
+    getManagerDashboardStats,
+    markDashboardNotificationRead,
+} from '../api/dashboardApi';
 import {
     mockGetStats,
     mockGetManagerStats,
@@ -44,11 +49,9 @@ import {
     ChevronDown,
     ChevronRight,
     CheckCheck,
-    AlertTriangle,
     RotateCcw,
     Inbox,
     Activity,
-    Users,
     TrendingUp,
     BarChart3,
 } from 'lucide-react';
@@ -184,19 +187,19 @@ export default function DashboardPage() {
             try {
                 const s = USE_MOCK_API
                     ? await mockGetStats()
-                    : (await api.get('/api/dashboard/stats')).data;
+                    : await getDashboardStats();
                 setStats(s);
 
                 if (role === 'MANAGER') {
                     const ms = USE_MOCK_API
                         ? await mockGetManagerStats()
-                        : (await api.get('/api/dashboard/stats/manager')).data;
+                        : await getManagerDashboardStats();
                     setManagerStats(ms);
                 }
 
                 const notifs = USE_MOCK_API
                     ? await mockGetNotifications(true)
-                    : (await api.get('/api/dashboard/notifications?unreadOnly=true')).data;
+                    : await getDashboardNotifications();
                 setNotifications(notifs);
             } catch (err) {
                 console.error('Erreur chargement dashboard :', err);
@@ -212,7 +215,7 @@ export default function DashboardPage() {
             if (USE_MOCK_API) {
                 await mockMarkNotificationRead(notifId);
             } else {
-                await api.put(`/api/dashboard/notifications/${notifId}/read`);
+                await markDashboardNotificationRead(notifId);
             }
             setNotifications(prev => prev.filter(n => n.id !== notifId));
         } catch (err) {
@@ -269,7 +272,7 @@ export default function DashboardPage() {
             {/* ════════════════════════════════════════════════════
                 SECTION L1 — Alertes + MTTD + Feedback
             ════════════════════════════════════════════════════ */}
-            {(role === 'L1' || role === 'MANAGER') && (
+            {role === 'L1' && (
                 <div className="space-y-3">
                     {/* Barre KPI : total alertes + MTTD */}
                     <div className="grid grid-cols-2 gap-3">
@@ -365,7 +368,7 @@ export default function DashboardPage() {
             {/* ════════════════════════════════════════════════════
                 SECTION L2 — Incidents + MTTR + Notifications
             ════════════════════════════════════════════════════ */}
-            {(role === 'L2' || role === 'MANAGER') && (
+            {role === 'L2' && (
                 <div className="space-y-3">
                     {/* Barre KPI : incidents actifs + MTTR */}
                     <div className="grid grid-cols-2 gap-3">

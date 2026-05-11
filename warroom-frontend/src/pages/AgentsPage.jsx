@@ -5,11 +5,15 @@
 // ══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
-import api from '../api/client';
 import { appConfig } from '../config/appConfig';
 import { useAuth } from '../context/AuthContext';
 import AgentConfigModal from '../components/modals/agents/AgentConfigModal.jsx';
 import AgentDetailModal from '../components/modals/agents/AgentDetailModal.jsx'; // ← NOUVEL IMPORT
+import {
+    getAgentDetail,
+    getAgents,
+    updateAgentConfig,
+} from '../api/agentsApi';
 import {
     mockGetAgents,
     mockGetAgentDetail,
@@ -61,8 +65,8 @@ export default function AgentsPage() {
                 const data = await mockGetAgents();
                 setAgents(data);
             } else {
-                const res = await api.get('/api/supervision/agents');
-                setAgents(res.data);
+                const data = await getAgents();
+                setAgents(data);
             }
         } catch (err) {
             console.error('Erreur chargement agents :', err);
@@ -70,7 +74,13 @@ export default function AgentsPage() {
         setLoadingList(false);
     }, []);
 
-    useEffect(() => { fetchAgents(); }, [fetchAgents]);
+    useEffect(() => {
+        const loadAgents = async () => {
+            await fetchAgents();
+        };
+
+        loadAgents();
+    }, [fetchAgents]);
 
     // ── DÉTAIL
     const openDetail = async (agentId) => {
@@ -82,8 +92,8 @@ export default function AgentsPage() {
                 const data = await mockGetAgentDetail(agentId);
                 setAgentDetail(data);
             } else {
-                const res = await api.get(`/api/supervision/agents/${agentId}`);
-                setAgentDetail(res.data);
+                const data = await getAgentDetail(agentId);
+                setAgentDetail(data);
             }
         } catch (err) {
             console.error('Erreur détail agent :', err);
@@ -105,7 +115,7 @@ export default function AgentsPage() {
             if (USE_MOCK_API) {
                 await mockUpdateAgentConfig(agentDetail.agent.agentId, newConfig);
             } else {
-                await api.put(`/api/admin/agents/${agentDetail.agent.agentId}/config`, newConfig);
+                await updateAgentConfig(agentDetail.agent.agentId, newConfig);
             }
             setAgentDetail(prev => ({
                 ...prev,
