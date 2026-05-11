@@ -24,7 +24,17 @@
 // ══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
-import api from '../api/client';
+import {
+    addCountermeasure,
+    addIncidentNote,
+    closeIncident,
+    getIncidentDetail,
+    getIncidents,
+    reassignIncident,
+    returnToL1,
+    takeIncident,
+    updateIncidentStatus,
+} from '../api/incidentsApi';
 import { getL2Users } from '../api/usersApi';
 import { useAuth } from '../context/AuthContext';
 import AlertSeverityBadge from '../components/ui/alerts/AlertSeverityBadge.jsx';
@@ -159,25 +169,20 @@ export default function IncidentsPage() {
                     severity: filters.severity,
                     assignedTo: (isL2 && viewMode === 'mine') ? user?.userId : (filters.assignedTo || null),
                 });
-                setIncidents(data.content);
-                setTotalPages(data.totalPages);
-                setTotalElements(data.totalElements);
+                setIncidents(data.content || []);
+                setTotalPages(data.totalPages || 0);
+                setTotalElements(data.totalElements || 0);
             } else {
-                const params = new URLSearchParams();
-                params.append('page', page);
-                params.append('size', PAGE_SIZE);
-                filters.status.forEach(s => params.append('status', s));
-                filters.severity.forEach(s => params.append('severity', s));
-                if (isL2 && viewMode === 'mine') {
-                    params.append('assignedTo', user?.userId);
-                } else if (filters.assignedTo) {
-                    params.append('assignedTo', filters.assignedTo);
-                }
-
-                const res = await api.get(`/api/incidents?${params.toString()}`);
-                setIncidents(res.data.content);
-                setTotalPages(res.data.totalPages);
-                setTotalElements(res.data.totalElements);
+                const data = await getIncidents({
+                    page,
+                    size: PAGE_SIZE,
+                    status: filters.status,
+                    severity: filters.severity,
+                    assignedTo: (isL2 && viewMode === 'mine') ? user?.userId : (filters.assignedTo || null),
+                });
+                setIncidents(data.content || []);
+                setTotalPages(data.totalPages || 0);
+                setTotalElements(data.totalElements || 0);
             }
         } catch (err) {
             console.error('Erreur chargement incidents :', err);
@@ -198,8 +203,12 @@ export default function IncidentsPage() {
                 const data = await mockGetIncidentDetail(incidentId);
                 setIncidentDetail(data);
             } else {
-                const res = await api.get(`/api/incidents/${incidentId}`);
-                setIncidentDetail(res.data);
+                const detail = await getIncidentDetail(incidentId);
+                setIncidentDetail({
+                    incident: detail.incident,
+                    alerts: detail.alerts,
+                    timeline: detail.timeline,
+                });
             }
         } catch (err) {
             console.error('Erreur chargement détail :', err);
@@ -238,7 +247,7 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 await mockTakeIncident(selectedIncidentId, user?.userId, user?.fullName);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/take`);
+                await takeIncident(selectedIncidentId);
             }
             await refreshDetail();
             fetchIncidents();
@@ -263,7 +272,7 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 await mockChangeStatus(selectedIncidentId, newStatus, note);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/status`, { newStatus, note });
+                await updateIncidentStatus(selectedIncidentId, { newStatus, note });
             }
             setStatusModal({ isOpen: false });
             await refreshDetail();
@@ -289,7 +298,7 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 await mockReassignIncident(selectedIncidentId, newAssigneeUserId, note);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/reassign`, { newAssigneeUserId, note });
+                await reassignIncident(selectedIncidentId, { newAssigneeUserId, note });
             }
             setReassignModal({ isOpen: false });
             await refreshDetail();
@@ -315,7 +324,7 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 await mockReturnToL1(selectedIncidentId, justification);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/return-to-l1`, { justification });
+                await returnToL1(selectedIncidentId, { justification });
             }
             setReturnModal({ isOpen: false });
             await refreshDetail();
@@ -341,7 +350,7 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 await mockCloseIncident(selectedIncidentId, summary);
             } else {
-                await api.put(`/api/incidents/${selectedIncidentId}/close`, { summary });
+                await closeIncident(selectedIncidentId, { summary });
             }
             setCloseModal({ isOpen: false });
             await refreshDetail();
@@ -367,7 +376,7 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 await mockAddNote(selectedIncidentId, content, user?.fullName, user?.role);
             } else {
-                await api.post(`/api/incidents/${selectedIncidentId}/notes`, { content });
+                await addIncidentNote(selectedIncidentId, { content });
             }
             setNoteModal({ isOpen: false });
             await refreshDetail();
@@ -393,10 +402,9 @@ export default function IncidentsPage() {
             if (USE_MOCK_API) {
                 result = await mockAddCountermeasure(selectedIncidentId, type, description, technicalCommand, user?.fullName, user?.role);
             } else {
-                const res = await api.post(`/api/incidents/${selectedIncidentId}/countermeasures`, {
+                result = await addCountermeasure(selectedIncidentId, {
                     type, description, technicalCommand,
                 });
-                result = res.data;
             }
 
             setCmModal({ isOpen: false });
@@ -597,9 +605,7 @@ export default function IncidentsPage() {
                                             <IncidentStatusBadge status={inc.status} />
                                         </td>
                                         <td className="px-6 py-3.5 text-gray-500">
-                                            {inc.assignedToFullName || (
-                                                <span className="text-amber-600 text-xs font-medium">Pool L2</span>
-                                            )}
+                                            {inc.assignedToFullName || 'Pool L2'}
                                         </td>
                                         <td className="px-6 py-3.5 text-gray-500 whitespace-nowrap">
                                             {new Date(inc.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
