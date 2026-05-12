@@ -682,13 +682,31 @@ class SimulationRunner:
 
     def heartbeat_loop(self, agent: VirtualAgent) -> None:
         start = time.time()
+        degraded_announced = False
 
         while not self.stop_event.is_set():
             elapsed = time.time() - start
 
+            # Agent dégradé :
+            # On arrête ses heartbeats après degrade_after_seconds.
+            # Comme la règle dashboard est basée sur lastSeenAt :
+            # - après ~90s sans heartbeat => ORANGE
+            # - après ~300s sans heartbeat => RED
             if agent.vm.profile == "degraded" and elapsed >= self.args.degrade_after_seconds:
                 agent.degraded = True
 
+                if not degraded_announced:
+                    degraded_announced = True
+                    print(
+                        f"[DEGRADED] {agent.vm.hostname} ralentit fortement : "
+                        "plus de heartbeat normal. Il deviendra ORANGE après ~90s."
+                    )
+
+                self.stop_event.wait(self.args.heartbeat_interval_seconds)
+                continue
+
+            # Agent bloqué :
+            # On arrête totalement heartbeat + événements.
             if agent.vm.profile == "blocked" and elapsed >= self.args.block_after_seconds:
                 agent.blocked = True
                 print(f"[BLOCKED] {agent.vm.hostname} ne répond plus : plus de heartbeat, plus d'événements.")
@@ -696,8 +714,7 @@ class SimulationRunner:
 
             try:
                 self.client.send_heartbeat(agent)
-                status = "DEGRADED" if agent.degraded else "GREEN"
-                print(f"[HB] {agent.vm.hostname} -> {status}")
+                print(f"[HB] {agent.vm.hostname} -> GREEN")
             except Exception as exc:
                 agent.failed_batches += 1
                 print(f"[WARN] Heartbeat échoué {agent.vm.hostname}: {exc}")
