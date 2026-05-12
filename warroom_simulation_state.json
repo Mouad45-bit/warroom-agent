@@ -1,20 +1,20 @@
 {
   "agents": {
     "srv-web-prod-01": {
-      "agentId": "agt-0a577774",
-      "apiKey": "2b3f9fe8-fe28-4db5-a80e-126dd444b3ca"
+      "agentId": "agt-3f9d4c56",
+      "apiKey": "02a205c8-98be-442c-9d43-4195fcfdf876"
     },
     "srv-db-prod-01": {
-      "agentId": "agt-db396ba6",
-      "apiKey": "43f94d2c-8425-44fb-84fc-7b08789bacff"
+      "agentId": "agt-79d8d514",
+      "apiKey": "48f6487a-af39-4dcf-a000-6ddf7a1ca21a"
     },
     "srv-bastion-01": {
-      "agentId": "agt-dc3630af",
-      "apiKey": "3f2670e7-a1ed-4e71-b849-fd876366a5a8"
+      "agentId": "agt-dc7d17c1",
+      "apiKey": "56c73b89-5601-4d30-9b4c-1cc405166a8e"
     },
     "srv-legacy-app-01": {
-      "agentId": "agt-148acfc6",
-      "apiKey": "f9f637fa-7509-4e18-b7d2-187ad183643e"
+      "agentId": "agt-851b336f",
+      "apiKey": "7ec7e6d8-7ed4-4a4f-8132-748ae2e596c3"
     }
   }
 }

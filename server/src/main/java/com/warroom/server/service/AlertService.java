@@ -65,7 +65,7 @@ public class AlertService {
         Specification<AlertRecord> toSpec = AlertSpecifications.createdBefore(to);
         if (toSpec != null) spec = spec.and(toSpec);
 
-        Sort sort = Sort.by(Sort.Order.desc("severity"), Sort.Order.desc("createdAt"));
+        Sort sort = Sort.by(Sort.Order.desc("createdAt"));
         return alertRepository.findAll(spec, PageRequest.of(page, size, sort));
     }
 
