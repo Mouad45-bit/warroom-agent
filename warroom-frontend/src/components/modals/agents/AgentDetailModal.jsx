@@ -153,6 +153,11 @@ export default function AgentDetailModal
     }) {
     if (!isOpen) return null;
 
+    const agent = agentDetail?.agent;
+    const latestHealth = agentDetail?.latestHealth;
+    const components = latestHealth?.components ?? [];
+    const heartbeatHistory = agentDetail?.heartbeatHistory ?? [];
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
             <div className="w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-xl flex flex-col">
@@ -193,13 +198,13 @@ export default function AgentDetailModal
                             {/* Infos générales */}
                             <div className="grid grid-cols-2 gap-3 text-xs">
                                 {[
-                                    ['OS', `${agentDetail.agent.osName} ${agentDetail.agent.osVersion}`],
-                                    ['Version agent', agentDetail.agent.agentVersion],
-                                    ['Enrôlé le', new Date(agentDetail.agent.enrolledAt).toLocaleDateString('fr-FR')],
-                                    ['Dernier heartbeat', timeAgo(agentDetail.agent.lastSeenAt)],
-                                    ['Heartbeat interval', `${agentDetail.agent.heartbeatIntervalSeconds}s`],
-                                    ['Batch size', agentDetail.agent.batchSize],
-                                    ['Retry interval', `${agentDetail.agent.retryIntervalSeconds}s`],
+                                    ['OS', `${agent?.osName || '—'} ${agent?.osVersion || ''}`],
+                                    ['Version agent', agent?.agentVersion || '—'],
+                                    ['Enrôlé le', agent?.enrolledAt ? new Date(agent.enrolledAt).toLocaleDateString('fr-FR') : '—'],
+                                    ['Dernier heartbeat', timeAgo(agent?.lastSeenAt)],
+                                    ['Heartbeat interval', agent?.heartbeatIntervalSeconds ? `${agent.heartbeatIntervalSeconds}s` : '—'],
+                                    ['Batch size', agent?.batchSize ?? '—'],
+                                    ['Retry interval', agent?.retryIntervalSeconds ? `${agent.retryIntervalSeconds}s` : '—'],
                                 ].map(([label, value]) => (
                                     <div key={label} className="flex justify-between py-1.5 border-b border-gray-50">
                                         <span className="text-gray-400">{label}</span>
@@ -209,7 +214,7 @@ export default function AgentDetailModal
                                 <div className="flex justify-between py-1.5 border-b border-gray-50">
                                     <span className="text-gray-400">Santé</span>
                                     {(() => {
-                                        const h = HEALTH_COLORS[agentDetail.agent.healthStatus] || HEALTH_COLORS.RED;
+                                        const h = HEALTH_COLORS[agent?.healthStatus] || HEALTH_COLORS.RED;
                                         return (
                                             <span className={`inline-flex items-center gap-1 ${h.text} font-medium`}>
                                                 <span className={`w-2 h-2 rounded-full ${h.dot}`} />
@@ -223,10 +228,10 @@ export default function AgentDetailModal
                             {/* Composants */}
                             <div>
                                 <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-2">
-                                    Composants ({agentDetail.latestHealth.components.filter(c => c.status === 'RUNNING').length}/{agentDetail.latestHealth.components.length})
+                                    Composants ({components.filter(c => c.status === 'RUNNING').length}/{components.length})
                                 </h4>
                                 <div className="space-y-1.5">
-                                    {agentDetail.latestHealth.components.map(comp => {
+                                    {components.map(comp => {
                                         const Icon = COLLECTOR_ICONS[comp.name] || Cpu;
                                         const isRunning = comp.status === 'RUNNING';
                                         return (
@@ -265,10 +270,10 @@ export default function AgentDetailModal
                                 </h4>
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        ['En file', agentDetail.latestHealth.queuedEvents, agentDetail.latestHealth.queuedEvents > 20 ? 'text-amber-700 bg-amber-50' : 'text-gray-700 bg-gray-50'],
-                                        ['Livrés', agentDetail.latestHealth.deliveredEvents, 'text-green-700 bg-green-50'],
-                                        ['Batches échoués', agentDetail.latestHealth.failedBatches, agentDetail.latestHealth.failedBatches > 0 ? 'text-red-700 bg-red-50' : 'text-gray-700 bg-gray-50'],
-                                        ['Événements perdus', agentDetail.latestHealth.droppedEvents, agentDetail.latestHealth.droppedEvents > 0 ? 'text-red-700 bg-red-50' : 'text-gray-700 bg-gray-50'],
+                                        ['En file', latestHealth?.queuedEvents ?? 0, (latestHealth?.queuedEvents ?? 0) > 20 ? 'text-amber-700 bg-amber-50' : 'text-gray-700 bg-gray-50'],
+                                        ['Livrés', latestHealth?.deliveredEvents ?? 0, 'text-green-700 bg-green-50'],
+                                        ['Batches échoués', latestHealth?.failedBatches ?? 0, (latestHealth?.failedBatches ?? 0) > 0 ? 'text-red-700 bg-red-50' : 'text-gray-700 bg-gray-50'],
+                                        ['Événements perdus', latestHealth?.droppedEvents ?? 0, (latestHealth?.droppedEvents ?? 0) > 0 ? 'text-red-700 bg-red-50' : 'text-gray-700 bg-gray-50'],
                                     ].map(([label, value, cls]) => (
                                         <div key={label} className={`p-2.5 rounded-lg ${cls.split(' ').slice(1).join(' ')}`}>
                                             <p className="text-[10px] text-gray-400 uppercase">{label}</p>
@@ -279,27 +284,27 @@ export default function AgentDetailModal
                             </div>
 
                             {/* Erreurs système */}
-                            {(agentDetail.latestHealth.enrollmentRetries > 0 ||
-                                agentDetail.latestHealth.configRefreshFailures > 0 ||
-                                agentDetail.latestHealth.componentRestarts > 0) && (
+                            {((latestHealth?.enrollmentRetries ?? 0) > 0 ||
+                                (latestHealth?.configRefreshFailures ?? 0) > 0 ||
+                                (latestHealth?.componentRestarts ?? 0) > 0) && (
                                 <div>
                                     <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-2">
                                         Compteurs d'erreurs
                                     </h4>
                                     <div className="flex gap-3 text-xs">
-                                        {agentDetail.latestHealth.enrollmentRetries > 0 && (
+                                        {(latestHealth?.enrollmentRetries ?? 0) > 0 && (
                                             <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700">
-                                                Enrollment retries: {agentDetail.latestHealth.enrollmentRetries}
+                                                Enrollment retries: {latestHealth.enrollmentRetries}
                                             </span>
                                         )}
-                                        {agentDetail.latestHealth.configRefreshFailures > 0 && (
+                                        {(latestHealth?.configRefreshFailures ?? 0) > 0 && (
                                             <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700">
-                                                Config refresh: {agentDetail.latestHealth.configRefreshFailures}
+                                                Config refresh: {latestHealth.configRefreshFailures}
                                             </span>
                                         )}
-                                        {agentDetail.latestHealth.componentRestarts > 0 && (
+                                        {(latestHealth?.componentRestarts ?? 0) > 0 && (
                                             <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700">
-                                                Redémarrages: {agentDetail.latestHealth.componentRestarts}
+                                                Redémarrages: {latestHealth.componentRestarts}
                                             </span>
                                         )}
                                     </div>
@@ -307,7 +312,7 @@ export default function AgentDetailModal
                             )}
 
                             {/* Mini-graphe heartbeat (composant amélioré) */}
-                            <HeartbeatChart history={agentDetail.heartbeatHistory} />
+                            <HeartbeatChart history={heartbeatHistory} />
                         </>
                     ) : (
                         <div className="flex flex-col items-center py-12 text-gray-400">

@@ -34,6 +34,89 @@ function timeAgo(isoDate) {
     return `il y a ${Math.floor(diff / 86400)}j`;
 }
 
+function calculateHealthStatus(lastSeenAt) {
+    if (!lastSeenAt) return 'RED';
+
+    const secondsSinceLastSeen = Math.floor(
+        (Date.now() - new Date(lastSeenAt).getTime()) / 1000
+    );
+
+    if (secondsSinceLastSeen < 90) return 'GREEN';
+    if (secondsSinceLastSeen <= 300) return 'ORANGE';
+
+    return 'RED';
+}
+
+function normalizeComponent(comp) {
+    const isRunning =
+        comp.status === 'RUNNING' ||
+        comp.running === true;
+
+    return {
+        name: comp.name || comp.componentName || 'Composant inconnu',
+        status: comp.status || (isRunning ? 'RUNNING' : 'STOPPED'),
+        statusMessage: comp.statusMessage || comp.message || '',
+        restartCount: comp.restartCount ?? 0,
+    };
+}
+
+function normalizeHeartbeat(hb) {
+    return {
+        timestamp: hb.timestamp || hb.createdAt,
+        healthStatus: hb.healthStatus || hb.status || (hb.running ? 'GREEN' : 'RED'),
+        queuedEvents: hb.queuedEvents ?? 0,
+    };
+}
+
+function normalizeAgentDetail(raw) {
+    if (!raw) return null;
+
+    const agent = raw.agent || {};
+
+    // Le backend peut retourner latestHealth, latestRecord, ou autre nom selon ton DTO.
+    const latestHealthRaw = raw.latestHealth || raw.latestRecord || {};
+
+    // Ton backend semble retourner components séparément, pas forcément dans latestHealth.components.
+    const componentsRaw =
+        latestHealthRaw.components ||
+        raw.components ||
+        [];
+
+    const heartbeatHistoryRaw =
+        raw.heartbeatHistory ||
+        raw.heartbeatSummaries ||
+        raw.history ||
+        [];
+
+    const normalizedComponents = componentsRaw.map(normalizeComponent);
+
+    return {
+        ...raw,
+
+        agent: {
+            ...agent,
+            healthStatus: agent.healthStatus || calculateHealthStatus(agent.lastSeenAt),
+        },
+
+        latestHealth: {
+            ...latestHealthRaw,
+
+            components: normalizedComponents,
+
+            queuedEvents: latestHealthRaw.queuedEvents ?? 0,
+            deliveredEvents: latestHealthRaw.deliveredEvents ?? 0,
+            failedBatches: latestHealthRaw.failedBatches ?? 0,
+            droppedEvents: latestHealthRaw.droppedEvents ?? 0,
+
+            enrollmentRetries: latestHealthRaw.enrollmentRetries ?? 0,
+            configRefreshFailures: latestHealthRaw.configRefreshFailures ?? 0,
+            componentRestarts: latestHealthRaw.componentRestarts ?? 0,
+        },
+
+        heartbeatHistory: heartbeatHistoryRaw.map(normalizeHeartbeat),
+    };
+}
+
 export default function AgentsPage() {
     const { user } = useAuth();
     const isAdmin = user?.role === 'ADMIN';
@@ -76,17 +159,19 @@ export default function AgentsPage() {
         setDetailOpen(true);
         setLoadingDetail(true);
         setAgentDetail(null);
+
         try {
             if (USE_MOCK_API) {
                 const data = await mockGetAgentDetail(agentId);
-                setAgentDetail(data);
+                setAgentDetail(normalizeAgentDetail(data));
             } else {
                 const res = await api.get(`/api/supervision/agents/${agentId}`);
-                setAgentDetail(res.data);
+                setAgentDetail(normalizeAgentDetail(res.data));
             }
         } catch (err) {
             console.error('Erreur détail agent :', err);
         }
+
         setLoadingDetail(false);
     };
 
