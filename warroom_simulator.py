@@ -27,6 +27,7 @@ import argparse
 import json
 import random
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -40,7 +41,6 @@ try:
 except ImportError:
     print("Erreur: le module 'requests' est absent. Installe-le avec: pip install requests")
     sys.exit(1)
-
 
 # =============================================================================
 # Configuration logique de la simulation
@@ -418,7 +418,7 @@ class AttackEventFactory:
                 "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process",
                 "LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=781,fd=3))",
                 f"ESTAB 0 0 10.10.1.10:51222 {c2}:{malicious_port} users:((\"{proc}\",pid={pid},fd=4))",
-                f"LISTEN 0 128 0.0.0.0:{random.choice(['31337', '5555', '9099'])} 0.0.0.0:* users:((\"{proc}\",pid={pid+1},fd=5))",
+                f"LISTEN 0 128 0.0.0.0:{random.choice(['31337', '5555', '9099'])} 0.0.0.0:* users:((\"{proc}\",pid={pid + 1},fd=5))",
             ]
         )
         return {"sourceType": "network.connections", "payload": payload}
@@ -438,7 +438,7 @@ class AttackEventFactory:
                 "USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND",
                 "root 1 0.0 0.1 169396 13200 ? Ss 10:00 0:01 /sbin/init",
                 f"root {pid} {cpu} 4.4 999999 500000 ? R 18:06 0:20 {tool}",
-                f"www-data {pid+1} 1.5 2.0 524288 163840 ? Sl 18:06 0:01 /usr/sbin/nginx",
+                f"www-data {pid + 1} 1.5 2.0 524288 163840 ? Sl 18:06 0:01 /usr/sbin/nginx",
             ]
         )
         return {"sourceType": "process.list", "payload": payload}
@@ -491,7 +491,7 @@ class AttackEventFactory:
             events.append(
                 {
                     "sourceType": "linux.auth.log",
-                    "payload": f"May 11 18:00:{10+i:02d} sshd[120{i}]: Failed password for root from {brute_ip} port {45000+i} ssh2",
+                    "payload": f"May 11 18:00:{10 + i:02d} sshd[120{i}]: Failed password for root from {brute_ip} port {45000 + i} ssh2",
                 }
             )
 
@@ -540,16 +540,92 @@ class SimulationRunner:
             return {"agents": {}}
 
     def save_state(self, state: Dict[str, Any]) -> None:
-        self.state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+        self.state_path.write_text(
+            json.dumps(state, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def reset_database_for_simulation(self) -> None:
+        """
+        Réinitialise les données de simulation à chaque lancement.
+
+        On conserve uniquement le compte admin pour pouvoir continuer
+        à se connecter au backend avec admin/admin.
+        """
+        if self.args.no_db_reset:
+            print("[SKIP] Reset base désactivé par option --no-db-reset.")
+            return
+
+        print("\n=== Reset base de données simulation ===")
+
+        simulated_usernames = ", ".join(
+            "'" + user["username"].replace("'", "''") + "'"
+            for user in USERS_TO_CREATE
+        )
+
+        sql = f"""
+        DO $$
+        DECLARE
+        tables_to_truncate text;
+        BEGIN
+        SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+        INTO tables_to_truncate
+        FROM pg_tables
+        WHERE schemaname = 'public'
+        AND tablename NOT IN ('users', 'flyway_schema_history');
+
+        IF tables_to_truncate IS NOT NULL THEN
+        EXECUTE 'TRUNCATE TABLE ' || tables_to_truncate || ' RESTART IDENTITY CASCADE';
+        END IF;
+        END $$;
+
+        DELETE FROM users
+        WHERE username IN ({simulated_usernames});
+        """
+
+        command = [
+            "docker", "exec", "-i",
+            self.args.db_container,
+            "psql",
+            "-U", self.args.db_user,
+            "-d", self.args.db_name,
+            "-v", "ON_ERROR_STOP=1",
+        ]
+
+        result = subprocess.run(
+            command,
+            input=sql,
+            text=True,
+            capture_output=True,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Reset PostgreSQL échoué.\n"
+                f"Commande : {' '.join(command)}\n"
+                f"STDOUT : {result.stdout}\n"
+                f"STDERR : {result.stderr}"
+            )
+
+        if self.state_path.exists():
+            self.state_path.unlink()
+            print(f"[OK] Fichier d'état supprimé : {self.state_path}")
+
+        print("[OK] Base remise à zéro : agents, alertes, événements, incidents, audit, notifications supprimés.")
+        print("[OK] Comptes simulés L1/L2/MANAGER supprimés.")
+        print("[INFO] Le compte admin est conservé.")
 
     def setup_users(self) -> None:
         if self.args.skip_users:
             print("[SKIP] Création utilisateurs désactivée par option.")
             return
+
         print("\n=== Création des analystes et managers ===")
         self.client.login_admin(self.args.admin_username, self.args.admin_password)
+
         for user in USERS_TO_CREATE:
             self.client.create_user_if_absent(user, self.args.user_password)
+
         print(f"[INFO] Mot de passe commun des comptes simulés : {self.args.user_password}")
 
     def setup_agents(self) -> None:
@@ -566,6 +642,7 @@ class SimulationRunner:
 
         for vm in VIRTUAL_MACHINES:
             saved = state["agents"].get(vm.hostname)
+
             if saved and saved.get("agentId") and saved.get("apiKey"):
                 identity = {"agentId": saved["agentId"], "apiKey": saved["apiKey"]}
                 print(f"[SKIP] Agent réutilisé depuis l'état local : {vm.hostname} -> {identity['agentId']}")
@@ -574,7 +651,13 @@ class SimulationRunner:
                 state["agents"][vm.hostname] = identity
 
             self.client.update_agent_config(identity["agentId"])
-            self.agents.append(VirtualAgent(vm=vm, agent_id=identity["agentId"], api_key=identity["apiKey"]))
+            self.agents.append(
+                VirtualAgent(
+                    vm=vm,
+                    agent_id=identity["agentId"],
+                    api_key=identity["apiKey"],
+                )
+            )
 
         self.save_state(state)
 
@@ -591,6 +674,7 @@ class SimulationRunner:
             events = buckets[agent.agent_id]
             if not events:
                 continue
+
             self.client.send_events(agent, events)
             agent.queued_events += len(events)
             agent.delivered_events += len(events)
@@ -598,6 +682,7 @@ class SimulationRunner:
 
     def heartbeat_loop(self, agent: VirtualAgent) -> None:
         start = time.time()
+
         while not self.stop_event.is_set():
             elapsed = time.time() - start
 
@@ -622,8 +707,10 @@ class SimulationRunner:
     def event_loop(self) -> None:
         print("\n=== Flux continu : 1 événement par intervalle depuis un agent actif ===")
         index = 0
+
         while not self.stop_event.is_set():
             active_agents = [a for a in self.agents if not a.blocked]
+
             if not active_agents:
                 print("[STOP] Aucun agent actif restant.")
                 return
@@ -644,17 +731,28 @@ class SimulationRunner:
             self.stop_event.wait(self.args.event_interval_seconds)
 
     def run(self) -> None:
+        self.reset_database_for_simulation()
         self.setup_users()
         self.setup_agents()
         self.send_initial_events()
 
         print("\n=== Démarrage des boucles de simulation ===")
+
         for agent in self.agents:
-            t = threading.Thread(target=self.heartbeat_loop, args=(agent,), daemon=True, name=f"hb-{agent.vm.hostname}")
+            t = threading.Thread(
+                target=self.heartbeat_loop,
+                args=(agent,),
+                daemon=True,
+                name=f"hb-{agent.vm.hostname}",
+            )
             t.start()
             self.threads.append(t)
 
-        event_thread = threading.Thread(target=self.event_loop, daemon=True, name="event-loop")
+        event_thread = threading.Thread(
+            target=self.event_loop,
+            daemon=True,
+            name="event-loop",
+        )
         event_thread.start()
         self.threads.append(event_thread)
 
@@ -669,6 +767,7 @@ class SimulationRunner:
     def stop(self) -> None:
         self.stop_event.set()
         print("\n[STOP] Arrêt demandé. Fermeture des boucles...")
+
         for t in self.threads:
             t.join(timeout=2)
 
@@ -680,15 +779,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--admin-username", default="admin", help="Username admin")
     parser.add_argument("--admin-password", default="admin", help="Mot de passe admin")
     parser.add_argument("--user-password", default=DEFAULT_PASSWORD, help="Mot de passe pour les comptes simulés")
-    parser.add_argument("--state-file", default=STATE_FILE_DEFAULT, help="Fichier local pour réutiliser les agents enrôlés")
+    parser.add_argument("--state-file", default=STATE_FILE_DEFAULT,
+                        help="Fichier local pour réutiliser les agents enrôlés")
     parser.add_argument("--reset-state", action="store_true", help="Ignore l'état local et enrôle de nouveaux agents")
     parser.add_argument("--skip-users", action="store_true", help="Ne crée pas les utilisateurs")
     parser.add_argument("--initial-events", type=int, default=25, help="Nombre d'événements envoyés au démarrage")
-    parser.add_argument("--event-interval-seconds", type=int, default=60, help="Intervalle entre deux événements continus")
+    parser.add_argument("--event-interval-seconds", type=int, default=60,
+                        help="Intervalle entre deux événements continus")
     parser.add_argument("--heartbeat-interval-seconds", type=int, default=30, help="Intervalle des heartbeats")
     parser.add_argument("--degrade-after-seconds", type=int, default=180, help="Moment où l'agent 3 devient dégradé")
     parser.add_argument("--block-after-seconds", type=int, default=150, help="Moment où l'agent 4 se bloque")
     parser.add_argument("--timeout", type=int, default=10, help="Timeout HTTP")
+    parser.add_argument("--no-db-reset", action="store_true", help="Ne vide pas la base au démarrage")
+    parser.add_argument("--db-container", default="warroom-postgres", help="Nom du conteneur PostgreSQL Docker")
+    parser.add_argument("--db-user", default="warroom", help="Utilisateur PostgreSQL")
+    parser.add_argument("--db-name", default="warroom", help="Nom de la base PostgreSQL")
     parser.add_argument(
         "--fast-demo",
         action="store_true",

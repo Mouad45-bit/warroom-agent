@@ -99,10 +99,8 @@ export default function AlertsPage() {
                     const users = await mockGetL2Users();
                     setL2Users(users);
                 } else {
-                    const res = await api.get('/api/admin/users');
-                    setL2Users(res.data.filter(u => u.role === 'L2' && u.active).map(u => ({
-                        userId: u.userId, fullName: u.fullName,
-                    })));
+                    const res = await api.get('/api/incidents/l2-analysts');
+                    setL2Users(res.data);
                 }
             } catch (err) {
                 console.error('Erreur chargement L2 :', err);
