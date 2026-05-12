@@ -147,7 +147,23 @@ export default function AlertsPage() {
 
     // ── SSE temps réel ───────────────────────────────────────
     useSSE((newAlert) => {
-        setAlerts(prev => [{ ...newAlert, _isNew: true }, ...prev]);
+        setAlerts(prev => [
+            {
+                ...newAlert,
+                _isLatestSseAlert: true,
+                _isPreviousSseAlert: false,
+            },
+            ...prev.map(alert => ({
+                ...alert,
+
+                // L'ancienne dernière devient avant-dernière
+                _isPreviousSseAlert: alert._isLatestSseAlert === true,
+
+                // Plus aucune ancienne alerte n'est la dernière
+                _isLatestSseAlert: false,
+            })),
+        ]);
+
         setTotalElements(prev => prev + 1);
     });
 
@@ -348,7 +364,17 @@ export default function AlertsPage() {
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                             {alerts.map(a => (
-                                <tr key={a.id} onClick={() => openDetail(a.id)} className={`cursor-pointer hover:bg-gray-50/50 transition-colors ${a._isNew ? 'animate-flash' : ''}`}>
+                                <tr
+                                    key={a.id}
+                                    onClick={() => openDetail(a.id)}
+                                    className={`cursor-pointer transition-colors ${
+                                        a._isLatestSseAlert
+                                            ? 'bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-500 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.25)]'
+                                            : a._isPreviousSseAlert
+                                                ? 'bg-[#fffbeb]/60 hover:bg-amber-50 border-l-4 border-amber-200'
+                                                : 'hover:bg-gray-50/50 border-l-4 border-transparent'
+                                    }`}
+                                >
                                     <td className="px-6 py-3.5 text-gray-500 whitespace-nowrap">{new Date(a.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                                     <td className="px-6 py-3.5 text-center"><AlertSeverityBadge severity={a.severity} /></td>
                                     <td className="px-6 py-3.5 text-gray-700 font-medium">{a.agent?.hostname || '—'}</td>
