@@ -43,9 +43,12 @@ public class EventAnalysisService {
         for (EventAnalyzer analyzer : matchedAnalyzers) {
             List<AlertRecord> alerts = analyzer.analyze(event);
             if (!alerts.isEmpty()) {
+                for (AlertRecord alert : alerts) {
+                    alert.setSourceType(event.getSourceType());
+                }
+
                 alertRepository.saveAll(alerts);
 
-                // Optionnel : Affichage console pour le debug
                 for (AlertRecord alert : alerts) {
                     System.err.println(" ALERTE [" + alert.getSeverity() + "] : " + alert.getMessage());
                     sseService.broadcast(alert);

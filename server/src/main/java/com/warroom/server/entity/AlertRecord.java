@@ -19,6 +19,7 @@ public class AlertRecord {
 
     private Long eventId;
     private String ruleId;
+    private String sourceType;
 
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
