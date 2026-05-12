@@ -248,6 +248,19 @@ public class IncidentController {
     }
 
     // -----------------------------------------------------------------
+    // GET /api/incidents/l2-analysts — Liste des L2 pour assignation
+    // -----------------------------------------------------------------
+    @GetMapping("/l2-analysts")
+    public ResponseEntity<?> getL2Analysts() {
+        List<Map<String, Object>> l2Users = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.L2 && u.isActive())
+                .map(u -> Map.<String,Object>of("userId", u.getId(), "fullName", u.getFullName()))
+                .toList();
+
+        return ResponseEntity.ok(l2Users);
+    }
+
+    // -----------------------------------------------------------------
     // Utilitaires
     // -----------------------------------------------------------------
 
