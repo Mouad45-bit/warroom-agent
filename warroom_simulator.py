@@ -27,6 +27,7 @@ import argparse
 import json
 import random
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -542,6 +543,81 @@ class SimulationRunner:
     def save_state(self, state: Dict[str, Any]) -> None:
         self.state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
+        def reset_database_for_simulation(self) -> None:
+            """
+            Réinitialise les données de simulation à chaque lancement.
+
+            On conserve uniquement le compte admin pour pouvoir continuer
+            à se connecter au backend avec admin/admin.
+
+            Cette méthode :
+            - vide toutes les tables métier sauf users et flyway_schema_history ;
+            - supprime les comptes simulés L1/L2/MANAGER ;
+            - supprime le fichier local warroom_simulation_state.json.
+            """
+        if self.args.no_db_reset:
+            print("[SKIP] Reset base désactivé par option --no-db-reset.")
+            return
+
+        print("\n=== Reset base de données simulation ===")
+
+        simulated_usernames = ", ".join(
+            "'" + user["username"].replace("'", "''") + "'"
+            for user in USERS_TO_CREATE
+        )
+
+        sql = f"""
+        DO $$
+        DECLARE
+        tables_to_truncate text;
+        BEGIN
+        SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+        INTO tables_to_truncate
+        FROM pg_tables
+        WHERE schemaname = 'public'
+        AND tablename NOT IN ('users', 'flyway_schema_history');
+        
+        IF tables_to_truncate IS NOT NULL THEN
+        EXECUTE 'TRUNCATE TABLE ' || tables_to_truncate || ' RESTART IDENTITY CASCADE';
+        END IF;
+        END $$;
+        
+        DELETE FROM users
+        WHERE username IN ({simulated_usernames});
+        """
+
+        command = [
+            "docker", "exec", "-i",
+            self.args.db_container,
+            "psql",
+            "-U", self.args.db_user,
+            "-d", self.args.db_name,
+            "-v", "ON_ERROR_STOP=1",
+        ]
+
+        result = subprocess.run(
+            command,
+            input=sql,
+            text=True,
+            capture_output=True,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Reset PostgreSQL échoué.\n"
+                f"Commande : {' '.join(command)}\n"
+                f"STDOUT : {result.stdout}\n"
+                f"STDERR : {result.stderr}"
+            )
+
+        if self.state_path.exists():
+            self.state_path.unlink()
+            print(f"[OK] Fichier d'état supprimé : {self.state_path}")
+
+        print("[OK] Base remise à zéro : agents, alertes, événements, incidents, audit, notifications supprimés.")
+        print("[OK] Comptes simulés L1/L2/MANAGER supprimés.")
+        print("[INFO] Le compte admin est conservé.")
+
     def setup_users(self) -> None:
         if self.args.skip_users:
             print("[SKIP] Création utilisateurs désactivée par option.")
@@ -644,6 +720,7 @@ class SimulationRunner:
             self.stop_event.wait(self.args.event_interval_seconds)
 
     def run(self) -> None:
+        self.reset_database_for_simulation()
         self.setup_users()
         self.setup_agents()
         self.send_initial_events()
@@ -689,6 +766,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--degrade-after-seconds", type=int, default=180, help="Moment où l'agent 3 devient dégradé")
     parser.add_argument("--block-after-seconds", type=int, default=150, help="Moment où l'agent 4 se bloque")
     parser.add_argument("--timeout", type=int, default=10, help="Timeout HTTP")
+    parser.add_argument("--no-db-reset", action="store_true", help="Ne vide pas la base au démarrage")
+    parser.add_argument("--db-container", default="warroom-postgres", help="Nom du conteneur PostgreSQL Docker")
+    parser.add_argument("--db-user", default="warroom", help="Utilisateur PostgreSQL")
+    parser.add_argument("--db-name", default="warroom", help="Nom de la base PostgreSQL")
     parser.add_argument(
         "--fast-demo",
         action="store_true",
