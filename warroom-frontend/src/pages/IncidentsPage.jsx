@@ -596,7 +596,11 @@ export default function IncidentsPage() {
                                             <IncidentStatusBadge status={inc.status} />
                                         </td>
                                         <td className="px-6 py-3.5 text-gray-500">
-                                            {inc.assignedToFullName || (
+                                            {inc.assignedToUserId ? (
+                                                <span className="text-gray-700 font-medium">
+                                                    {inc.assignedToFullName || `Utilisateur #${inc.assignedToUserId}`}
+                                                </span>
+                                            ) : (
                                                 <span className="text-amber-600 text-xs font-medium">Pool L2</span>
                                             )}
                                         </td>
