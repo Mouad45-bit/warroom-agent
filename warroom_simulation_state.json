@@ -1,0 +1,20 @@
+{
+  "agents": {
+    "srv-web-prod-01": {
+      "agentId": "agt-f11dd0e4",
+      "apiKey": "472d74f8-6178-4c05-b821-62a6f5c40374"
+    },
+    "srv-db-prod-01": {
+      "agentId": "agt-df2e105a",
+      "apiKey": "c5820a53-4578-418a-a41b-01dc7d711b93"
+    },
+    "srv-bastion-01": {
+      "agentId": "agt-6a7b439e",
+      "apiKey": "2dc33329-9a51-44b7-8c45-024e2edec475"
+    },
+    "srv-legacy-app-01": {
+      "agentId": "agt-3203e28c",
+      "apiKey": "609aa9b3-a53b-4a34-9680-d7dcd521b0b5"
+    }
+  }
+}

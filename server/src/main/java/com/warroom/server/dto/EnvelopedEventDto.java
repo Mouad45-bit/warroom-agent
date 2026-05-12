@@ -12,7 +12,7 @@ public record EnvelopedEventDto(
         String agentId,
         String hostname,
         String sourceType,
-        @JsonDeserialize(using = InstantDeserializer.class)
+        // @JsonDeserialize(using = InstantDeserializer.class)
         Instant collectedAt,
         String payload
 ) {}
