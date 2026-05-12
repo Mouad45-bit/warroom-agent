@@ -70,8 +70,18 @@ public final class AgentApplication {
         // =====================================================================
 
         // Le client HTTP qui permet de discuter avec le serveur backend Spring Boot.
+        String serverUrl = System.getenv().getOrDefault(
+                "WARROOM_SERVER_URL",
+                "http://localhost:8080"
+        );
+
+        String enrollmentSecret = System.getenv().getOrDefault(
+                "WARROOM_ENROLLMENT_SECRET",
+                "warroom-jee-secret-2026"
+        );
+
         AgentEnrollmentClient enrollmentClient =
-                new AgentEnrollmentClient("http://localhost:8080", objectMapper);
+                new AgentEnrollmentClient(serverUrl, enrollmentSecret, objectMapper);
 
         // Gère la configuration dynamique (intervalle de heartbeat, taille des lots, etc.).
         // Il essaiera de la lire depuis le serveur, sinon depuis son cache local ("config-cache.json").

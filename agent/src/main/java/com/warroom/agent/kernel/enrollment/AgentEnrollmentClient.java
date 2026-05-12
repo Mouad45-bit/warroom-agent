@@ -37,9 +37,12 @@ public class AgentEnrollmentClient {
     // Très performant, il évite d'importer des librairies externes lourdes comme Apache HttpClient.
     private final HttpClient httpClient;
 
-    // Le constructeur initialise le client avec l'URL cible et le convertisseur JSON.
-    public AgentEnrollmentClient(String baseUrl, ObjectMapper objectMapper) {
+    private final String enrollmentSecret;
+
+    //
+    public AgentEnrollmentClient(String baseUrl, String enrollmentSecret, ObjectMapper objectMapper) {
         this.baseUrl = baseUrl;
+        this.enrollmentSecret = enrollmentSecret;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newHttpClient();
     }
@@ -64,9 +67,10 @@ public class AgentEnrollmentClient {
 
             // 2. Construction de la requête HTTP
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/api/agents/enroll"))        // Endpoint d'enrôlement
-                    .header("Content-Type", "application/json")  // On précise au serveur qu'on envoie du JSON
-                    .POST(HttpRequest.BodyPublishers.ofString(body))        // Méthode POST avec notre JSON dans le corps
+                    .uri(URI.create(baseUrl + "/api/agents/enroll"))
+                    .header("Content-Type", "application/json")
+                    .header("X-Enrollment-Secret", enrollmentSecret)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
 
             // 3. Envoi de la requête de manière "synchrone" (le thread attend la réponse du serveur)
