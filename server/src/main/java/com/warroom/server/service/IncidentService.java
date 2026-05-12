@@ -122,24 +122,29 @@ public class IncidentService {
     // LISTER LES INCIDENTS
     // =================================================================
 
+
+
     public Page<Incident> getIncidents(int page, int size,
                                        List<IncidentStatus> statuses, List<Severity> severities,
                                        Long assignedTo, Long currentUserId, Role currentRole) {
         Sort sort = Sort.by(Sort.Order.desc("severity"), Sort.Order.desc("createdAt"));
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        if (currentRole == Role.L2 && assignedTo == null) {
-            return incidentRepository.findByAssignedToUserId(currentUserId, pageRequest);
-        }
+        // 1. Le L1 est strictement limité aux incidents qu'il a lui-même créés
         if (currentRole == Role.L1) {
             return incidentRepository.findByCreatedByUserId(currentUserId, pageRequest);
         }
+
+        // 2. Si le front-end demande explicitement les incidents d'un utilisateur (ex: onglet "Mes incidents")
         if (assignedTo != null) {
             return incidentRepository.findByAssignedToUserId(assignedTo, pageRequest);
         }
+
+        // 3. Sinon, on renvoie la liste globale avec les filtres de statut (pour le L2 "Tous" et le Manager)
         if (statuses != null && !statuses.isEmpty()) {
             return incidentRepository.findByStatusIn(statuses, pageRequest);
         }
+
         return incidentRepository.findAll(pageRequest);
     }
 
