@@ -1,0 +1,21 @@
+## Connexion root réussie suspecte
+
+echo "May 12 21:56:00 lab-docker-01 sshd[3001]: Accepted password for root from 45.14.22.10 port 51422 ssh2" >> /var/log/auth.log
+
+##
+## Persistance / intégrité fichier
+
+###
+echo "# suspicious ssh config change $(date)" >> /etc/ssh/sshd_config
+
+###
+cat > /etc/cron.d/warroom-system-update <<'EOF'
+* * * * * root /bin/echo warroom-lab >> /tmp/warroom-cron.log
+EOF
+
+##
+## Brute-force SSH
+
+for i in $(seq 1 5); do
+  echo "May 12 21:55:0$i lab-docker-01 sshd[20$i]: Failed password for root from 45.14.22.10 port 45$i ssh2" >> /var/log/auth.log
+done
