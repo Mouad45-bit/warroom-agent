@@ -11,7 +11,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/agents")
-public class AgentController {
+public class  AgentController {
 
     private final AgentService agentService;
 

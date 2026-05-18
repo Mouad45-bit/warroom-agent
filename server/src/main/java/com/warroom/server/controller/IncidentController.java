@@ -60,8 +60,7 @@ public class IncidentController {
     // -----------------------------------------------------------------
 
     @GetMapping
-    // CORRECTION : Page<Incident> devient Page<Map<String, Object>>
-    public ResponseEntity<Page<Map<String, Object>>> getIncidents(
+    public ResponseEntity<Page<Incident>> getIncidents(
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size,
             @RequestParam(value = "status", required = false) List<IncidentStatus> status,

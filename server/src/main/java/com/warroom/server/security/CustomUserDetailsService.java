@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 
 @Service
-public class CustomUserDetailsService implements UserDetailsService {
+public class  CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
 
