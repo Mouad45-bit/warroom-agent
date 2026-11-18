@@ -1,0 +1,204 @@
+### ============================================================
+### WARROOM SOC — TESTS MODULE 5 : SUPERVISION & TÉLÉMÉTRIE (V2 CONFORME CONTRAT)
+### ============================================================
+### Prérequis :
+### 1. Modules 0 exécuté (pour les comptes ahmed.l1 et karim.mgr)
+### 2. Mock Data SQL exécuté (pour la présence de agt-test01)
+### 3. Avoir attendu > 90s depuis la création de agt-test01
+### ============================================================
+
+@host = http://localhost:8080
+@enrollmentSecret = warroom-jee-secret-2026
+
+
+### ============================================================
+### SCÉNARIO 1 : SÉCURITÉ ET CONTRÔLE D'ACCÈS (L1 INTERDIT)
+### ============================================================
+
+### M5-1.1 — Login L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+> {%
+    client.test("M5-1.1 Login L1 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M5-1.2 — L1 tente de voir la supervision → 403
+GET {{host}}/api/supervision/agents
+
+> {%
+    client.test("M5-1.2 L1 interdit sur supervision", function() {
+        client.assert(response.status === 403, "Status 403 Forbidden");
+    });
+%}
+
+### M5-1.3 — Logout L1
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### SCÉNARIO 2 : MANAGER ET STATUT "RED" (INACTIF)
+### ============================================================
+
+### M5-2.1 — Login Manager (Autorisé)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+> {%
+    client.test("M5-2.1 Login Manager OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M5-2.2 — Vérifier le statut RED (Mock Agent)
+GET {{host}}/api/supervision/agents
+
+> {%
+    client.test("M5-2.2 Liste des agents OK", function() {
+        client.assert(response.status === 200, "Status 200");
+
+        var agents = response.body;
+        client.assert(agents.length > 0, "Au moins un agent doit exister");
+
+        var testAgent = agents.find(a => a.agentId === "agt-test01");
+        if (testAgent) {
+            // Puisque ce mock a été créé il y a un moment, il doit être RED (> 5min)
+            client.assert(testAgent.healthStatus === "RED", "L'agent agt-test01 devrait être RED par timeout");
+        }
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 3 : SIMULATION D'UN NOUVEL AGENT (ENROLLED -> HEARTBEAT)
+### ============================================================
+
+### M5-3.1 — Un nouvel Agent s'enrôle
+POST {{host}}/api/agents/enroll
+X-Enrollment-Secret: {{enrollmentSecret}}
+Content-Type: application/json
+
+{
+  "hostname": "srv-bdd-prod",
+  "osName": "Linux",
+  "osVersion": "Ubuntu 22.04",
+  "agentVersion": "1.0.0"
+}
+
+> {%
+    client.test("M5-3.1 Enrôlement OK", function() {
+        client.assert(response.status === 201, "Status 201 Created");
+        client.assert(response.body.agentId !== undefined, "agentId généré");
+        client.assert(response.body.apiKey !== undefined, "apiKey générée");
+
+        client.global.set("newAgentId", response.body.agentId);
+        client.global.set("newApiKey", response.body.apiKey);
+    });
+%}
+
+### M5-3.2 — Le Manager vérifie le statut (Doit être GREEN mais 0 collecteurs)
+GET {{host}}/api/supervision/agents
+
+> {%
+    client.test("M5-3.2 Statut après enrôlement", function() {
+        client.assert(response.status === 200, "Status 200");
+
+        var newAgent = response.body.find(a => a.agentId === client.global.get("newAgentId"));
+        client.assert(newAgent !== undefined, "Le nouvel agent est dans la liste");
+        client.assert(newAgent.healthStatus === "GREEN", "Vient de s'enrôler = GREEN (< 90s)");
+        client.assert(newAgent.activeCollectors === 0, "Aucun heartbeat reçu = 0 collecteur actif");
+    });
+%}
+
+### M5-3.3 — L'Agent envoie son premier Heartbeat (avec ses composants)
+POST {{host}}/api/agents/{{newAgentId}}/heartbeat
+Authorization: Bearer {{newApiKey}}
+Content-Type: application/json
+
+{
+  "agentId": "{{newAgentId}}",
+  "hostname": "srv-bdd-prod",
+  "timestamp": "2026-05-10T12:00:00Z",
+  "running": true,
+  "queuedEvents": 15,
+  "deliveredEvents": 500,
+  "failedBatches": 0,
+  "droppedEvents": 0,
+  "enrollmentRetries": 1,
+  "configRefreshFailures": 0,
+  "componentRestarts": 0,
+  "componentHealth": [
+    { "componentName": "LogCollector", "running": true, "statusMessage": "OK" },
+    { "componentName": "NetworkCollector", "running": true, "statusMessage": "OK" }
+  ]
+}
+
+> {%
+    client.test("M5-3.3 Heartbeat reçu", function() {
+        client.assert(response.status === 200, "Status 200 OK");
+    });
+%}
+
+### M5-3.4 — Le Manager vérifie la mise à jour des collecteurs
+GET {{host}}/api/supervision/agents
+
+> {%
+    client.test("M5-3.4 Collecteurs mis à jour", function() {
+        client.assert(response.status === 200, "Status 200");
+
+        var activeAgent = response.body.find(a => a.agentId === client.global.get("newAgentId"));
+        client.assert(activeAgent.healthStatus === "GREEN", "Toujours GREEN");
+        client.assert(activeAgent.activeCollectors === 2, "Les 2 composants envoyés doivent être comptabilisés");
+    });
+%}
+
+
+### ============================================================
+### SCÉNARIO 4 : DÉTAIL DE L'AGENT (CONTRAT VALIDÉ)
+### ============================================================
+
+### M5-4.1 — Le Manager récupère le détail complet de l'agent
+GET {{host}}/api/supervision/agents/{{newAgentId}}
+
+> {%
+    client.test("M5-4.1 Détail Agent OK", function() {
+        client.assert(response.status === 200, "Status 200");
+
+        var detail = response.body;
+        client.assert(detail.agent.agentId === client.global.get("newAgentId"), "Bon agent renvoyé");
+        client.assert(detail.latestRecord !== null, "Le dernier enregistrement santé est présent");
+        client.assert(detail.latestRecord.queuedEvents === 15, "Les métriques sont exactes");
+
+        client.assert(detail.recentHeartbeats.length === 1, "Le heartbeat est dans l'historique résumé");
+        client.assert(detail.components.length === 2, "Les composants ont été extraits du JSON");
+        client.assert(detail.components[0].componentName === "LogCollector", "Composant 1 identifié");
+    });
+%}
+
+### M5-4.2 — Détail d'un agent inconnu → 404
+GET {{host}}/api/supervision/agents/agt-inconnu-99
+
+> {%
+    client.test("M5-4.2 Agent inconnu 404", function() {
+        client.assert(response.status === 404, "Status 404 Not Found");
+    });
+%}
+
+### M5-4.3 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("Déconnexion finale OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### ============================================================
+### FIN DES TESTS MODULE 5
+### ============================================================

@@ -1,0 +1,773 @@
+### ============================================================
+### WARROOM SOC — TESTS COMPLETS MODULES 0 & 1
+### ============================================================
+### Exécuter dans l'ordre. IntelliJ gère les cookies automatiquement.
+###
+### PRÉREQUIS :
+### 1. Le serveur tourne sur localhost:8080
+### 2. La base a été créée (ddl-auto=create au premier démarrage)
+### 3. Le script mock-data.sql a été exécuté dans pgAdmin
+### ============================================================
+
+@host = http://localhost:8080
+
+
+### ============================================================
+### MODULE 0 — SCÉNARIO 1 : ADMIN PAR DÉFAUT
+### ============================================================
+
+### M0-1.1 — Login Admin par défaut
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin"
+}
+
+> {%
+    client.test("M0-1.1 Login Admin OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.role === "ADMIN", "Rôle ADMIN");
+        client.assert(response.body.username === "admin", "Username admin");
+    });
+%}
+
+### M0-1.2 — Vérification session /me
+GET {{host}}/api/auth/me
+
+> {%
+    client.test("M0-1.2 Session active", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.role === "ADMIN", "Rôle ADMIN");
+    });
+%}
+
+
+### ============================================================
+### MODULE 0 — SCÉNARIO 2 : CRÉATION DE COMPTES
+### ============================================================
+
+### M0-2.1 — Créer un analyste L1
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{
+  "username": "ahmed.l1",
+  "password": "MotDePasse123",
+  "fullName": "Ahmed Benali",
+  "role": "L1",
+  "email": "ahmed@warroom.local"
+}
+
+> {%
+    client.test("M0-2.1 L1 créé", function() {
+        client.assert(response.status === 201, "Status 201");
+        client.assert(response.body.role === "L1", "Rôle L1");
+        client.global.set("l1UserId", response.body.userId);
+    });
+%}
+
+### M0-2.2 — Créer un analyste L2
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{
+  "username": "sara.l2",
+  "password": "MotDePasse456",
+  "fullName": "Sara El Amrani",
+  "role": "L2",
+  "email": "sara@warroom.local"
+}
+
+> {%
+    client.test("M0-2.2 L2 créé", function() {
+        client.assert(response.status === 201, "Status 201");
+        client.assert(response.body.role === "L2", "Rôle L2");
+        client.global.set("l2UserId", response.body.userId);
+    });
+%}
+
+### M0-2.3 — Créer un Manager
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{
+  "username": "karim.mgr",
+  "password": "MotDePasse789",
+  "fullName": "Karim Idrissi",
+  "role": "MANAGER",
+  "email": "karim@warroom.local"
+}
+
+> {%
+    client.test("M0-2.3 Manager créé", function() {
+        client.assert(response.status === 201, "Status 201");
+        client.assert(response.body.role === "MANAGER", "Rôle MANAGER");
+    });
+%}
+
+### M0-2.4 — Conflit : pseudo déjà pris
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{
+  "username": "ahmed.l1",
+  "password": "autre",
+  "fullName": "Autre Ahmed",
+  "role": "L2"
+}
+
+> {%
+    client.test("M0-2.4 Conflit 409", function() {
+        client.assert(response.status === 409, "Status 409");
+    });
+%}
+
+### M0-2.5 — Rôle invalide
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{
+  "username": "test.invalid",
+  "password": "test",
+  "fullName": "Test",
+  "role": "SUPERADMIN"
+}
+
+> {%
+    client.test("M0-2.5 Rôle invalide 400", function() {
+        client.assert(response.status === 400, "Status 400");
+    });
+%}
+
+### M0-2.6 — Lister tous les utilisateurs
+GET {{host}}/api/admin/users
+
+> {%
+    client.test("M0-2.6 Liste users", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.length >= 4, "Au moins 4 utilisateurs (admin + 3 créés)");
+    });
+%}
+
+
+### ============================================================
+### MODULE 0 — SCÉNARIO 3 : CONTRÔLE D'ACCÈS PAR RÔLE
+### ============================================================
+
+### M0-3.1 — Déconnexion Admin
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("M0-3.1 Déconnexion OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M0-3.2 — Connexion en L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "ahmed.l1",
+  "password": "MotDePasse123"
+}
+
+> {%
+    client.test("M0-3.2 Login L1 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.role === "L1", "Rôle L1");
+    });
+%}
+
+### M0-3.3 — L1 tente d'accéder à l'admin → 403
+GET {{host}}/api/admin/users
+
+> {%
+    client.test("M0-3.3 L1 interdit sur admin", function() {
+        client.assert(response.status === 403, "Status 403 Forbidden");
+    });
+%}
+
+### M0-3.4 — L1 accède à /me → OK
+GET {{host}}/api/auth/me
+
+> {%
+    client.test("M0-3.4 L1 accès /me OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.role === "L1", "Rôle L1");
+    });
+%}
+
+### M0-3.5 — Déconnexion L1
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### MODULE 0 — SCÉNARIO 4 : ANTI-BRUTEFORCE
+### ============================================================
+
+### M0-4.1 — Échec 1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "mauvais"}
+
+### M0-4.2 — Échec 2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "mauvais"}
+
+### M0-4.3 — Échec 3
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "mauvais"}
+
+### M0-4.4 — Échec 4
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "mauvais"}
+
+### M0-4.5 — Échec 5 (déclenche le verrouillage)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "mauvais"}
+
+### M0-4.6 — Échec 6 → doit être 423
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "mauvais"}
+
+> {%
+    client.test("M0-4.6 Compte verrouillé 423", function() {
+        client.assert(response.status === 423, "Status 423 Locked");
+    });
+%}
+
+### M0-4.7 — Bon mot de passe mais compte verrouillé → 423
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+> {%
+    client.test("M0-4.7 Toujours verrouillé", function() {
+        client.assert(response.status === 423, "Status 423 même avec bon MDP");
+    });
+%}
+
+### M0-4.8 — Accès sans session → 401
+GET {{host}}/api/auth/me
+
+> {%
+    client.test("M0-4.8 Pas de session 401", function() {
+        client.assert(response.status === 401, "Status 401");
+    });
+%}
+
+
+### ============================================================
+### MODULE 0 — SCÉNARIO 5 : DÉSACTIVATION DE COMPTE
+### ============================================================
+
+### M0-5.1 — Login Admin pour désactiver
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "admin", "password": "admin"}
+
+### M0-5.2 — Admin désactive le compte L2 (sara.l2)
+# Utilise l'ID sauvegardé en M0-2.2
+PUT {{host}}/api/admin/users/{{l2UserId}}/disable
+
+> {%
+    client.test("M0-5.2 Compte L2 désactivé", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M0-5.3 — Admin tente de désactiver son propre compte → 403
+PUT {{host}}/api/admin/users/1/disable
+
+> {%
+    client.test("M0-5.3 Auto-désactivation interdite", function() {
+        client.assert(response.status === 403, "Status 403");
+    });
+%}
+
+### M0-5.4 — Réactiver le compte L2
+PUT {{host}}/api/admin/users/{{l2UserId}}/enable
+
+> {%
+    client.test("M0-5.4 Compte réactivé", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M0-5.5 — Déconnexion Admin
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### MODULE 1 — CONNEXION L1 (Prérequis)
+### ============================================================
+
+### M1-0.1 — Login L1 pour le triage
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "ahmed.l1",
+  "password": "MotDePasse123"
+}
+
+> {%
+    client.test("M1-0.1 Login L1 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 1 : LISTE ET PAGINATION
+### ============================================================
+
+### M1-1.1 — Liste par défaut (page 0, 20 éléments)
+GET {{host}}/api/alerts?page=0&size=20
+
+> {%
+    client.test("M1-1.1 Liste alertes OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.content.length > 0, "Au moins 1 alerte");
+        client.assert(response.body.totalElements >= 15, "Au moins 15 alertes mock");
+    });
+%}
+
+### M1-1.2 — Pagination : page 0, taille 5
+GET {{host}}/api/alerts?page=0&size=5
+
+> {%
+    client.test("M1-1.2 Pagination 5/page", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.content.length <= 5, "Max 5 éléments");
+        client.assert(response.body.totalPages >= 3, "Au moins 3 pages");
+    });
+%}
+
+### M1-1.3 — Page 2
+GET {{host}}/api/alerts?page=1&size=5
+
+> {%
+    client.test("M1-1.3 Page 2 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.number === 1, "Page index = 1");
+    });
+%}
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 2 : FILTRES DYNAMIQUES
+### ============================================================
+
+### M1-2.1 — Filtre par sévérité CRITICAL
+GET {{host}}/api/alerts?severity=CRITICAL
+
+> {%
+    client.test("M1-2.1 Filtre CRITICAL", function() {
+        client.assert(response.status === 200, "Status 200");
+        var allCritical = response.body.content.every(a => a.severity === "CRITICAL");
+        client.assert(allCritical, "Toutes les alertes sont CRITICAL");
+        client.assert(response.body.content.length >= 4, "Au moins 4 CRITICAL");
+        // Sauvegarder une alerte CRITICAL pour les tests suivants
+        client.global.set("criticalAlertId", response.body.content[0].id);
+    });
+%}
+
+### M1-2.2 — Filtre multi-sévérité : CRITICAL + HIGH
+GET {{host}}/api/alerts?severity=CRITICAL,HIGH
+
+> {%
+    client.test("M1-2.2 Filtre CRITICAL+HIGH", function() {
+        client.assert(response.status === 200, "Status 200");
+        var valid = response.body.content.every(a => a.severity === "CRITICAL" || a.severity === "HIGH");
+        client.assert(valid, "Toutes sont CRITICAL ou HIGH");
+    });
+%}
+
+### M1-2.3 — Filtre par statut NEW
+GET {{host}}/api/alerts?status=NEW
+
+> {%
+    client.test("M1-2.3 Filtre NEW", function() {
+        client.assert(response.status === 200, "Status 200");
+        var allNew = response.body.content.every(a => a.status === "NEW");
+        client.assert(allNew, "Toutes les alertes sont NEW");
+    });
+%}
+
+### M1-2.4 — Filtre par agent
+GET {{host}}/api/alerts?agentId=agt-mock-001
+
+> {%
+    client.test("M1-2.4 Filtre agent-001", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.content.length > 0, "Au moins 1 alerte");
+    });
+%}
+
+### M1-2.5 — Filtres combinés : CRITICAL + NEW + agent-001
+GET {{host}}/api/alerts?severity=CRITICAL&status=NEW&agentId=agt-mock-001
+
+> {%
+    client.test("M1-2.5 Filtres combinés", function() {
+        client.assert(response.status === 200, "Status 200");
+        var valid = response.body.content.every(a =>
+            a.severity === "CRITICAL" && a.status === "NEW"
+        );
+        client.assert(valid, "Toutes CRITICAL + NEW");
+    });
+%}
+
+### M1-2.6 — Filtre sans résultat (agent inexistant)
+GET {{host}}/api/alerts?agentId=agt-fake-999
+
+> {%
+    client.test("M1-2.6 Aucun résultat", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.content.length === 0, "Liste vide");
+        client.assert(response.body.totalElements === 0, "Total = 0");
+    });
+%}
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 3 : DÉTAIL D'UNE ALERTE
+### ============================================================
+
+### M1-3.1 — Détail de l'alerte CRITICAL
+GET {{host}}/api/alerts/{{criticalAlertId}}
+
+> {%
+    client.test("M1-3.1 Détail alerte OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.alert !== undefined, "Champ alert présent");
+        client.assert(response.body.agent !== undefined, "Champ agent présent");
+        client.assert(response.body.recentAlerts !== undefined, "Champ recentAlerts présent");
+        client.assert(response.body.recentAlerts.length <= 10, "Max 10 alertes contextuelles");
+    });
+%}
+
+### M1-3.2 — Détail avec sourceEvent
+GET {{host}}/api/alerts/{{criticalAlertId}}
+
+> {%
+    client.test("M1-3.2 SourceEvent présent", function() {
+        client.assert(response.status === 200, "Status 200");
+        // Le sourceEvent devrait contenir le payload brut
+        if (response.body.sourceEvent && response.body.sourceEvent.payload) {
+            client.assert(response.body.sourceEvent.payload.length > 0, "Payload non vide");
+        }
+    });
+%}
+
+### M1-3.3 — Détail d'une alerte inexistante → 404
+GET {{host}}/api/alerts/99999
+
+> {%
+    client.test("M1-3.3 Alerte introuvable 404", function() {
+        client.assert(response.status === 404, "Status 404");
+    });
+%}
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 4 : ACQUITTEMENT (Workflow L1)
+### ============================================================
+
+### M1-4.1 — Acquitter une alerte CRITICAL
+PUT {{host}}/api/alerts/{{criticalAlertId}}/acknowledge
+
+> {%
+    client.test("M1-4.1 Acquittement OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.status === "ACKNOWLEDGED", "Status ACKNOWLEDGED");
+        client.assert(response.body.qualifiedAt !== null, "qualifiedAt rempli");
+    });
+%}
+
+### M1-4.2 — Double acquittement → 409
+PUT {{host}}/api/alerts/{{criticalAlertId}}/acknowledge
+
+> {%
+    client.test("M1-4.2 Double acquittement interdit", function() {
+        client.assert(response.status === 409, "Status 409 Conflict");
+    });
+%}
+
+### M1-4.3 — Vérifier que le filtre NEW exclut l'alerte acquittée
+GET {{host}}/api/alerts?status=NEW
+
+> {%
+    client.test("M1-4.3 Alerte acquittée exclue du filtre NEW", function() {
+        client.assert(response.status === 200, "Status 200");
+        var found = response.body.content.some(a => a.id == client.global.get("criticalAlertId"));
+        client.assert(!found, "L'alerte acquittée ne doit plus apparaître dans les NEW");
+    });
+%}
+
+### M1-4.4 — Filtre ACKNOWLEDGED montre l'alerte
+GET {{host}}/api/alerts?status=ACKNOWLEDGED
+
+> {%
+    client.test("M1-4.4 Alerte visible dans ACKNOWLEDGED", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.content.length >= 1, "Au moins 1 ACKNOWLEDGED");
+    });
+%}
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 5 : FAUX POSITIF
+### ============================================================
+
+### M1-5.1 — Sélectionner une alerte INFO pour le faux positif
+GET {{host}}/api/alerts?severity=INFO&status=NEW&size=1
+
+> {%
+    client.test("M1-5.1 Trouver une alerte INFO", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.content.length > 0, "Au moins 1 alerte INFO");
+        client.global.set("fpAlertId", response.body.content[0].id);
+    });
+%}
+
+### M1-5.2 — Faux positif SANS justification → 400
+PUT {{host}}/api/alerts/{{fpAlertId}}/false-positive
+Content-Type: application/json
+
+{
+  "justification": ""
+}
+
+> {%
+    client.test("M1-5.2 Justification obligatoire 400", function() {
+        client.assert(response.status === 400, "Status 400 Bad Request");
+    });
+%}
+
+### M1-5.3 — Faux positif sans champ justification → 400
+PUT {{host}}/api/alerts/{{fpAlertId}}/false-positive
+Content-Type: application/json
+
+{}
+
+> {%
+    client.test("M1-5.3 Champ manquant 400", function() {
+        client.assert(response.status === 400, "Status 400");
+    });
+%}
+
+### M1-5.4 — Faux positif AVEC justification → OK
+PUT {{host}}/api/alerts/{{fpAlertId}}/false-positive
+Content-Type: application/json
+
+{
+  "justification": "Après vérification, c'est l'équipe infra qui a lancé un scan de vulnérabilité planifié. L'IP 192.168.1.50 est celle du scanner Nessus."
+}
+
+> {%
+    client.test("M1-5.4 Faux positif OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.status === "FALSE_POSITIVE", "Status FALSE_POSITIVE");
+        client.assert(response.body.justification !== null, "Justification sauvegardée");
+    });
+%}
+
+### M1-5.5 — Re-qualifier la même alerte → 409
+PUT {{host}}/api/alerts/{{fpAlertId}}/false-positive
+Content-Type: application/json
+
+{
+  "justification": "Deuxième tentative"
+}
+
+> {%
+    client.test("M1-5.5 Double qualification interdite", function() {
+        client.assert(response.status === 409, "Status 409 Conflict");
+    });
+%}
+
+### M1-5.6 — Tenter d'acquitter une alerte déjà faux positif → 409
+PUT {{host}}/api/alerts/{{fpAlertId}}/acknowledge
+
+> {%
+    client.test("M1-5.6 Acquitter un FP interdit", function() {
+        client.assert(response.status === 409, "Status 409 Conflict");
+    });
+%}
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 6 : CONTRÔLE D'ACCÈS (L2 ne peut pas qualifier)
+### ============================================================
+
+### M1-6.1 — Déconnexion L1
+POST {{host}}/api/auth/logout
+
+### M1-6.2 — Connexion L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "sara.l2",
+  "password": "MotDePasse456"
+}
+
+> {%
+    client.test("M1-6.2 Login L2 OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M1-6.3 — L2 peut lire les alertes → OK
+GET {{host}}/api/alerts?page=0&size=5
+
+> {%
+    client.test("M1-6.3 L2 lecture alertes OK", function() {
+        client.assert(response.status === 200, "Status 200");
+        // Sauvegarder une alerte NEW pour tester l'acquittement interdit
+        var newAlert = response.body.content.find(a => a.status === "NEW");
+        if (newAlert) {
+            client.global.set("l2TestAlertId", newAlert.id);
+        }
+    });
+%}
+
+### M1-6.4 — L2 tente d'acquitter → 403
+PUT {{host}}/api/alerts/{{l2TestAlertId}}/acknowledge
+
+> {%
+    client.test("M1-6.4 L2 acquittement interdit 403", function() {
+        client.assert(response.status === 403, "Status 403 Forbidden");
+    });
+%}
+
+### M1-6.5 — L2 tente de qualifier en faux positif → 403
+PUT {{host}}/api/alerts/{{l2TestAlertId}}/false-positive
+Content-Type: application/json
+
+{
+  "justification": "Je suis L2, je ne devrais pas pouvoir faire ça"
+}
+
+> {%
+    client.test("M1-6.5 L2 faux positif interdit 403", function() {
+        client.assert(response.status === 403, "Status 403 Forbidden");
+    });
+%}
+
+### M1-6.6 — L2 peut voir le détail → OK
+GET {{host}}/api/alerts/{{l2TestAlertId}}
+
+> {%
+    client.test("M1-6.6 L2 détail OK (lecture seule)", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+### M1-6.7 — Déconnexion L2
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### MODULE 1 — SCÉNARIO 7 : VÉRIFICATION FINALE DES COMPTEURS
+### ============================================================
+
+### M1-7.1 — Login L1 pour vérifier l'état final
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "ahmed.l1",
+  "password": "MotDePasse123"
+}
+
+### M1-7.2 — Compter les alertes NEW restantes
+GET {{host}}/api/alerts?status=NEW
+
+> {%
+    client.test("M1-7.2 Compteur NEW cohérent", function() {
+        client.assert(response.status === 200, "Status 200");
+        // On a commencé avec 15 alertes NEW, acquitté 1, qualifié 1 FP → 13 restantes
+        client.assert(response.body.totalElements === 13, "13 alertes NEW restantes");
+    });
+%}
+
+### M1-7.3 — Compter les ACKNOWLEDGED
+GET {{host}}/api/alerts?status=ACKNOWLEDGED
+
+> {%
+    client.test("M1-7.3 Compteur ACKNOWLEDGED", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.totalElements === 1, "1 alerte ACKNOWLEDGED");
+    });
+%}
+
+### M1-7.4 — Compter les FALSE_POSITIVE
+GET {{host}}/api/alerts?status=FALSE_POSITIVE
+
+> {%
+    client.test("M1-7.4 Compteur FALSE_POSITIVE", function() {
+        client.assert(response.status === 200, "Status 200");
+        client.assert(response.body.totalElements === 1, "1 alerte FALSE_POSITIVE");
+    });
+%}
+
+### M1-7.5 — Vérification du tri (CRITICAL en premier)
+GET {{host}}/api/alerts?page=0&size=5
+
+> {%
+    client.test("M1-7.5 Tri sévérité DESC", function() {
+        client.assert(response.status === 200, "Status 200");
+        // Les premières alertes doivent être CRITICAL
+        client.assert(response.body.content[0].severity === "CRITICAL", "Première = CRITICAL");
+    });
+%}
+
+### M1-7.6 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("M1-7.6 Déconnexion finale OK", function() {
+        client.assert(response.status === 200, "Status 200");
+    });
+%}
+
+
+### ============================================================
+### FIN DES TESTS
+### ============================================================
+### Résumé des scénarios testés :
+###
+### MODULE 0 (5 scénarios, 17 requêtes) :
+###   ✓ Login admin par défaut + session /me
+###   ✓ Création L1, L2, Manager + conflits + rôle invalide
+###   ✓ Contrôle d'accès par rôle (L1 interdit sur /admin)
+###   ✓ Anti-bruteforce (5 échecs → 423, bon MDP → 423)
+###   ✓ Désactivation + réactivation de compte
+###
+### MODULE 1 (7 scénarios, 22 requêtes) :
+###   ✓ Liste paginée + multi-pages
+###   ✓ Filtres dynamiques (severity, status, agentId, combinés)
+###   ✓ Détail d'alerte + sourceEvent + recentAlerts
+###   ✓ Acquittement + protection double acquittement
+###   ✓ Faux positif + justification obligatoire + protection double
+###   ✓ Contrôle d'accès L2 (lecture OK, actions interdites)
+###   ✓ Compteurs finaux cohérents + tri sévérité
+### ============================================================

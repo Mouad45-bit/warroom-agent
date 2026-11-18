@@ -37,3 +37,13 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+#Scripts Python et exports
+export_spring_by_domain.py
+export_server.txt
+export_agent.txt
+export_full.txt
+spring_project_by_domain.txt
+*.pyc
+__pycache__/
+venv/

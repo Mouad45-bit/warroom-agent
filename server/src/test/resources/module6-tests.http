@@ -1,0 +1,442 @@
+### ============================================================
+### WARROOM SOC — TESTS MODULE 6 : JOURNAL D'AUDIT
+### ============================================================
+### Ce test suit la séquence du contrat (16 étapes).
+### Chaque action génère une entrée d'audit vérifiable.
+### ============================================================
+
+@host = http://localhost:8080
+
+
+### ============================================================
+### ÉTAPE 1 : LOGIN ADMIN → audit LOGIN
+### ============================================================
+
+### M6-1.1 — Login Admin
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "admin", "password": "admin"}
+
+> {%
+    client.test("M6-1 Login Admin OK", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 2 : CRÉER UN COMPTE L1 → audit USER_CREATED
+### ============================================================
+
+### M6-2.1 — Créer un L1 pour les tests audit
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{
+  "username": "audit.l1",
+  "password": "AuditTest123",
+  "fullName": "Audit L1 Test",
+  "role": "L1",
+  "email": "audit.l1@warroom.local"
+}
+
+> {%
+    client.test("M6-2 USER_CREATED", function() {
+        client.assert(response.status === 201);
+        client.global.set("auditL1Id", response.body.userId);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 3 : LOGOUT ADMIN → audit LOGOUT
+### ============================================================
+
+### M6-3.1 — Logout
+POST {{host}}/api/auth/logout
+
+> {%
+    client.test("M6-3 LOGOUT", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 4 : LOGIN L1 → audit LOGIN
+### ============================================================
+
+### M6-4.1 — Login L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+> {%
+    client.test("M6-4 Login L1", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 5 : ACQUITTER UNE ALERTE → audit ALERT_ACKNOWLEDGED
+### ============================================================
+
+### M6-5.1 — Trouver une alerte NEW
+GET {{host}}/api/alerts?status=NEW&size=3
+
+> {%
+    client.test("M6-5.1 Alertes trouvées", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.content.length > 0);
+        client.global.set("auditAlertId1", response.body.content[0].id);
+        if (response.body.content.length > 1) {
+            client.global.set("auditAlertId2", response.body.content[1].id);
+        }
+        if (response.body.content.length > 2) {
+            client.global.set("auditAlertId3", response.body.content[2].id);
+        }
+    });
+%}
+
+### M6-5.2 — Acquitter
+PUT {{host}}/api/alerts/{{auditAlertId1}}/acknowledge
+
+> {%
+    client.test("M6-5 ALERT_ACKNOWLEDGED", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 6 : FAUX POSITIF → audit ALERT_FALSE_POSITIVE
+### ============================================================
+
+### M6-6.1 — Qualifier en faux positif
+PUT {{host}}/api/alerts/{{auditAlertId2}}/false-positive
+Content-Type: application/json
+
+{"justification": "Test audit — scan planifié par l'équipe infra."}
+
+> {%
+    client.test("M6-6 ALERT_FALSE_POSITIVE", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 7 : ESCALADER → audit ALERT_ESCALATED + INCIDENT_CREATED
+### ============================================================
+
+### M6-7.1 — Escalader en incident
+PUT {{host}}/api/alerts/{{auditAlertId3}}/escalate
+Content-Type: application/json
+
+{
+  "title": "AUDIT-TEST — Incident pour le journal d'audit",
+  "severity": "HIGH",
+  "triageNote": "Test du module 6 — vérification de l'audit trail.",
+  "assignedToUserId": null,
+  "additionalAlertIds": []
+}
+
+> {%
+    client.test("M6-7 INCIDENT_CREATED + ALERT_ESCALATED", function() {
+        client.assert(response.status === 201);
+        client.global.set("auditIncidentId", response.body.id);
+    });
+%}
+
+### M6-7.2 — Logout L1
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### ÉTAPE 8 : LOGIN L2
+### ============================================================
+
+### M6-8.1 — Login L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+> {%
+    client.test("M6-8 Login L2", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 9 : PRENDRE EN CHARGE → audit INCIDENT_TAKEN
+### ============================================================
+
+### M6-9.1 — Take
+PUT {{host}}/api/incidents/{{auditIncidentId}}/take
+
+> {%
+    client.test("M6-9 INCIDENT_TAKEN", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 10 : CHANGER STATUT → audit INCIDENT_STATUS_CHANGED
+### ============================================================
+
+### M6-10.1 — INVESTIGATING → REMEDIATING
+PUT {{host}}/api/incidents/{{auditIncidentId}}/status
+Content-Type: application/json
+
+{"newStatus": "REMEDIATING", "note": "Test audit — passage en remédiation."}
+
+> {%
+    client.test("M6-10 INCIDENT_STATUS_CHANGED", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 11 : CONTRE-MESURE → audit INCIDENT_COUNTERMEASURE_ADDED
+### ============================================================
+
+### M6-11.1 — Ajouter contre-mesure
+POST {{host}}/api/incidents/{{auditIncidentId}}/countermeasures
+Content-Type: application/json
+
+{
+  "type": "BLOCK_IP",
+  "description": "Test audit — blocage IP fictif",
+  "technicalCommand": "iptables -A INPUT -s 10.0.0.99 -j DROP"
+}
+
+> {%
+    client.test("M6-11 INCIDENT_COUNTERMEASURE_ADDED", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 12 : NOTE → audit INCIDENT_NOTE_ADDED
+### ============================================================
+
+### M6-12.1 — Ajouter note
+POST {{host}}/api/incidents/{{auditIncidentId}}/notes
+Content-Type: application/json
+
+{"content": "Test audit — note de vérification du module 6."}
+
+> {%
+    client.test("M6-12 INCIDENT_NOTE_ADDED", function() {
+        client.assert(response.status === 201);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 13 : CLÔTURER → audit INCIDENT_CLOSED
+### ============================================================
+
+### M6-13.1 — REMEDIATING → RESOLVED
+PUT {{host}}/api/incidents/{{auditIncidentId}}/status
+Content-Type: application/json
+
+{"newStatus": "RESOLVED", "note": "Contre-mesures appliquées."}
+
+### M6-13.2 — RESOLVED → CLOSED
+PUT {{host}}/api/incidents/{{auditIncidentId}}/close
+Content-Type: application/json
+
+{"summary": "Test audit — incident clôturé pour vérification du journal."}
+
+> {%
+    client.test("M6-13 INCIDENT_CLOSED", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M6-13.3 — Logout L2
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### ÉTAPE 14 : LOGIN MANAGER
+### ============================================================
+
+### M6-14.1 — Login Manager
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "karim.mgr", "password": "MotDePasse789"}
+
+> {%
+    client.test("M6-14 Login Manager", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+
+### ============================================================
+### ÉTAPE 15 : CONSULTER LE JOURNAL D'AUDIT
+### ============================================================
+
+### M6-15.1 — Journal complet (page 0, 30 éléments)
+GET {{host}}/api/admin/audit-log?page=0&size=30
+
+> {%
+    client.test("M6-15.1 Journal d'audit accessible", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.totalElements >= 10, "Au moins 10 entrées d'audit");
+
+        var actions = response.body.content.map(e => e.actionType);
+        client.assert(actions.includes("LOGIN"), "LOGIN présent");
+        client.assert(actions.includes("LOGOUT"), "LOGOUT présent");
+        client.assert(actions.includes("USER_CREATED"), "USER_CREATED présent");
+        client.assert(actions.includes("ALERT_ACKNOWLEDGED"), "ALERT_ACKNOWLEDGED présent");
+        client.assert(actions.includes("ALERT_FALSE_POSITIVE"), "ALERT_FALSE_POSITIVE présent");
+        client.assert(actions.includes("ALERT_ESCALATED"), "ALERT_ESCALATED présent");
+        client.assert(actions.includes("INCIDENT_CREATED"), "INCIDENT_CREATED présent");
+        client.assert(actions.includes("INCIDENT_TAKEN"), "INCIDENT_TAKEN présent");
+        client.assert(actions.includes("INCIDENT_STATUS_CHANGED"), "INCIDENT_STATUS_CHANGED présent");
+        client.assert(actions.includes("INCIDENT_COUNTERMEASURE_ADDED"), "COUNTERMEASURE présent");
+        client.assert(actions.includes("INCIDENT_NOTE_ADDED"), "NOTE présent");
+        client.assert(actions.includes("INCIDENT_CLOSED"), "INCIDENT_CLOSED présent");
+    });
+%}
+
+### M6-15.2 — Filtrer par userId
+GET {{host}}/api/admin/audit-log?userId={{auditL1Id}}
+
+> {%
+    client.test("M6-15.2 Filtre par userId", function() {
+        client.assert(response.status === 200);
+    });
+%}
+
+### M6-15.3 — Filtrer par actionType
+GET {{host}}/api/admin/audit-log?actionType=LOGIN,LOGOUT
+
+> {%
+    client.test("M6-15.3 Filtre par actionType", function() {
+        client.assert(response.status === 200);
+        var valid = response.body.content.every(e => e.actionType === "LOGIN" || e.actionType === "LOGOUT");
+        client.assert(valid, "Toutes les entrées sont LOGIN ou LOGOUT");
+    });
+%}
+
+### M6-15.4 — Filtrer par targetType
+GET {{host}}/api/admin/audit-log?targetType=INCIDENT
+
+> {%
+    client.test("M6-15.4 Filtre par targetType", function() {
+        client.assert(response.status === 200);
+        var valid = response.body.content.every(e => e.targetType === "INCIDENT");
+        client.assert(valid, "Toutes les entrées ciblent un INCIDENT");
+    });
+%}
+
+### M6-15.5 — Logout Manager
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### ÉTAPE 16 : VÉRIFIER QUE L1 ET L2 N'ONT PAS ACCÈS
+### ============================================================
+
+### M6-16.1 — Login L1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "MotDePasse123"}
+
+### M6-16.2 — L1 tente d'accéder au journal → 403
+GET {{host}}/api/admin/audit-log
+
+> {%
+    client.test("M6-16.2 L1 interdit 403", function() {
+        client.assert(response.status === 403);
+    });
+%}
+
+### M6-16.3 — Logout L1
+POST {{host}}/api/auth/logout
+
+### M6-16.4 — Login L2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "sara.l2", "password": "MotDePasse456"}
+
+### M6-16.5 — L2 tente d'accéder au journal → 403
+GET {{host}}/api/admin/audit-log
+
+> {%
+    client.test("M6-16.5 L2 interdit 403", function() {
+        client.assert(response.status === 403);
+    });
+%}
+
+### M6-16.6 — Logout final
+POST {{host}}/api/auth/logout
+
+### M6-16.7 — Login_Failed pour vérifier l'audit
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "ahmed.l1", "password": "mauvais_mdp"}
+
+> {%
+    client.test("M6-16.7 LOGIN_FAILED généré", function() {
+        client.assert(response.status === 401);
+    });
+%}
+
+### M6-16.8 — Login Admin pour vérifier LOGIN_FAILED dans le journal
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"username": "admin", "password": "admin"}
+
+### M6-16.9 — Vérifier que LOGIN_FAILED est dans le journal
+GET {{host}}/api/admin/audit-log?actionType=LOGIN_FAILED
+
+> {%
+    client.test("M6-16.9 LOGIN_FAILED dans le journal", function() {
+        client.assert(response.status === 200);
+        client.assert(response.body.totalElements >= 1, "Au moins 1 LOGIN_FAILED");
+    });
+%}
+
+### M6-16.10 — Déconnexion finale
+POST {{host}}/api/auth/logout
+
+
+### ============================================================
+### FIN DES TESTS MODULE 6
+### ============================================================
+### Séquence du contrat vérifiée (16 étapes) :
+###   1.  LOGIN (admin)           → ✓ audit LOGIN
+###   2.  USER_CREATED            → ✓ audit USER_CREATED
+###   3.  LOGOUT                  → ✓ audit LOGOUT
+###   4.  LOGIN (L1)              → ✓ audit LOGIN
+###   5.  ALERT_ACKNOWLEDGED      → ✓ audit ALERT_ACKNOWLEDGED
+###   6.  ALERT_FALSE_POSITIVE    → ✓ audit ALERT_FALSE_POSITIVE
+###   7.  ALERT_ESCALATED         → ✓ audit ALERT_ESCALATED + INCIDENT_CREATED
+###   8.  LOGIN (L2)              → ✓ audit LOGIN
+###   9.  INCIDENT_TAKEN          → ✓ audit INCIDENT_TAKEN
+###   10. INCIDENT_STATUS_CHANGED → ✓ audit INCIDENT_STATUS_CHANGED
+###   11. COUNTERMEASURE_ADDED    → ✓ audit INCIDENT_COUNTERMEASURE_ADDED
+###   12. INCIDENT_NOTE_ADDED     → ✓ audit INCIDENT_NOTE_ADDED
+###   13. INCIDENT_CLOSED         → ✓ audit INCIDENT_CLOSED
+###   14. LOGIN (Manager)         → ✓ audit LOGIN
+###   15. JOURNAL ACCESSIBLE      → ✓ toutes les 15 entrées visibles + filtres
+###   16. CONTRÔLE D'ACCÈS        → ✓ L1 403, L2 403, LOGIN_FAILED audité
+### ============================================================
